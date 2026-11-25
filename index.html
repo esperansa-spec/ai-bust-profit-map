@@ -208,6 +208,12 @@ th:first-child,td:first-child{text-align:left;white-space:normal}
 thead th{font-weight:600;color:var(--ink-2);vertical-align:bottom;border-bottom:1px solid var(--base)}
 thead .grp th{text-align:center;border-bottom:0;padding-bottom:0}
 tr.layer td{font-weight:600;background:var(--wash)}
+td.dbar{position:relative;min-width:128px;padding-left:10px}
+td.dbar .db{position:absolute;right:4px;top:5px;bottom:5px;border-radius:3px;z-index:0;transform-origin:right center;animation:growX .6s cubic-bezier(.2,.75,.25,1) both}
+td.dbar .db.dn{background:color-mix(in srgb,var(--st-crit) 32%,transparent)}
+td.dbar .db.up{background:color-mix(in srgb,#0aac23 32%,transparent)}
+td.dbar .v{position:relative;z-index:1;padding-right:4px}
+@media (prefers-reduced-motion: reduce){ td.dbar .db{animation:none} }
 tr.total td{font-weight:600;border-top:1px solid var(--base)}
 .notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px 28px;font-size:14px}
 .notes ul{margin:0;padding-left:18px;color:var(--ink-2)}
@@ -582,8 +588,16 @@ function table(){
   var body=el("tbody"), all=[];
   function line(x,cls){
     var d=vals(x), tr=el("tr",cls), ph=d.pb-d.pt;
-    [d.n,fmt(d.r26),fmt(d.rb),fmt(d.rt),fmt(d.rb-d.rt),fmt(d.p26),fmt(d.pb),fmt(d.pt),fmt(ph*d.pds),fmt(ph*(1-d.pds)), d.p26<=0?"n/a":d.pt<0?"loss":pct(d.pt,d.p26)]
+    [d.n,fmt(d.r26),fmt(d.rb),fmt(d.rt),fmt(d.rb-d.rt),fmt(d.p26),fmt(d.pb),fmt(d.pt),fmt(ph*d.pds),fmt(ph*(1-d.pds))]
       .forEach(function(c){ tr.appendChild(el("td",null,c)); });
+    /* Trough vs today, with a bar beneath the number growing left from the cell's right edge: red down, green up, capped at 100% */
+    var td=el("td","dbar"), txt, pv=null;
+    if(d.p26<=0) txt="n/a"; else if(d.pt<0){ txt="loss"; pv=-100; } else { pv=Math.round((d.pt/d.p26-1)*100); txt=pct(d.pt,d.p26); }
+    if(pv!==null){
+      var w=Math.max(6,Math.min(Math.abs(pv),100)), bar=el("span","db "+(pv<0?"dn":"up"));
+      bar.style.width="max(10px, calc("+w+"% - 8px))"; td.appendChild(bar);
+    }
+    td.appendChild(el("span","v",txt)); tr.appendChild(td);
     body.appendChild(tr);
   }
   LAYERS.forEach(function(L){ var a=agg(L.rows); a.n=L.name; line(a,"layer"); L.rows.forEach(function(d){ line(d); all.push(d); }); });
