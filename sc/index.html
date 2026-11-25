@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-Hans-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 泡沫破裂利润地图</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: summary tiles, one shared-scale chart by layer, one panel per layer with its own scale, then what credit is pricing, then the table twin. */
+:root{
+  color-scheme: light;
+  --page:#f4f6f9; --surface:#ffffff; --ink:#16191d; --ink-2:#5d6570; --hair:#e4e7ec; --base:#bfc5cd;
+  --wash:#eef1f5; --accent:#1757ac;
+  --s-today:#257de0; --s-destroyed:#f47230; --s-delayed:#00b894;
+  --c-crwv:#ee7fac; --c-sbg:#008a17; --c-orcl:#6a4ce2; --c-nvda:#ec4647;
+  --st-quiet:#9aa3ae; --st-warn:#fbb315; --st-crit:#dc3c3d;
+  --font-body:"IBM Plex Sans","PingFang SC","Noto Sans SC","Microsoft YaHei",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-display:"IBM Plex Sans Condensed","IBM Plex Sans","PingFang SC","Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --page:#0c0d0f; --surface:#191919; --ink:#efefef; --ink-2:#9c9fa5; --hair:#303236; --base:#474a50;
+    --wash:#232528; --accent:#84b9f3;
+    --s-today:#338ced; --s-destroyed:#e76624; --s-delayed:#00a888;
+    --c-crwv:#e24d8b; --c-sbg:#0aac23; --c-orcl:#9887ef; --c-nvda:#eb6263;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --page:#0c0d0f; --surface:#191919; --ink:#efefef; --ink-2:#9c9fa5; --hair:#303236; --base:#474a50;
+  --wash:#232528; --accent:#84b9f3;
+  --s-today:#338ced; --s-destroyed:#e76624; --s-delayed:#00a888;
+  --c-crwv:#e24d8b; --c-sbg:#0aac23; --c-orcl:#9887ef; --c-nvda:#eb6263;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 56px;display:flex;flex-direction:column;gap:20px}
+h1{font-family:var(--font-display);font-weight:600;font-size:34px;line-height:1.1;margin:0;text-wrap:balance;letter-spacing:-0.01em}
+h2{font-family:var(--font-display);font-weight:600;font-size:20px;margin:0;text-wrap:balance}
+h3{font-family:var(--font-display);font-weight:600;font-size:15px;margin:0 0 6px}
+p{margin:0}
+.lang{display:flex;justify-content:flex-end;gap:4px;margin-bottom:6px}
+.lang a{font-size:13px;font-weight:500;color:var(--ink-2);text-decoration:none;border:1px solid var(--hair);border-radius:4px;padding:2px 9px;background:var(--surface)}
+.lang a:hover{color:var(--ink);border-color:var(--base)}
+.lang a[aria-current="page"]{color:var(--surface);background:var(--ink);border-color:var(--ink)}
+.lang a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.lede{color:var(--ink-2);max-width:68ch;margin-top:8px}
+.chain{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:14px;font-size:13px}
+.chain span{background:var(--wash);border-radius:4px;padding:3px 9px}
+.chain i{font-style:normal;color:var(--ink-2);align-self:center}
+
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.tile{background:var(--surface);border:1px solid var(--hair);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.tile .lab{font-size:13px;color:var(--ink-2)}
+.tile .val{font-family:var(--font-display);font-weight:600;font-size:32px;line-height:1.15}
+.tile .note{font-size:13px;color:var(--ink-2)}
+.tile.key{border-top:3px solid var(--s-destroyed)}
+
+.bar-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;position:sticky;top:0;z-index:5;background:var(--page);padding:10px 0;border-bottom:1px solid var(--hair)}
+.ctl{display:flex;flex-direction:column;gap:3px}
+.ctl > span{font-size:12px;color:var(--ink-2)}
+.seg{display:inline-flex;border:1px solid var(--base);border-radius:6px;overflow:hidden}
+.seg button{font:inherit;font-size:14px;font-weight:500;color:var(--ink);background:var(--surface);border:0;padding:6px 14px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--base)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.seg button:focus-visible,.row:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--ink-2);margin-left:auto}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+.sw.line{height:3px;width:16px;border-radius:2px}
+
+.card{background:var(--surface);border:1px solid var(--hair);border-radius:8px;padding:18px 18px 12px}
+.card-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 16px;margin-bottom:10px}
+.card-head .sum{font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.scale-note{font-size:12px;color:var(--ink-2);margin-bottom:6px}
+.rows{display:flex;flex-direction:column}
+.row{display:grid;grid-template-columns:200px minmax(0,1fr) 150px;gap:4px 16px;align-items:center;padding:10px 6px;border-top:1px solid var(--hair);border-radius:4px;cursor:default}
+.row:hover,.row:focus-visible{background:var(--wash)}
+.name{font-weight:500;line-height:1.3}
+.name small{display:block;font-weight:400;font-size:12px;color:var(--ink-2)}
+.rough{display:inline-block;font-size:11px;font-weight:500;color:var(--ink-2);border:1px solid var(--base);border-radius:3px;padding:0 5px;margin-left:6px;vertical-align:1px}
+.plot{display:flex;flex-direction:column;gap:3px;min-width:0;border-left:1px solid var(--base)}
+.track{display:flex;align-items:center;height:16px;min-width:0}
+.bar{height:14px;flex:0 0 auto;min-width:2px;transform-origin:left center;box-shadow:inset 0 1px 0 rgba(255,255,255,.22);
+  animation:growX .75s cubic-bezier(.2,.75,.25,1) both;animation-delay:calc(var(--i,0) * 45ms)}
+.bar.neg{transform-origin:right center}
+.bar.today,.g-today{background:var(--s-today);background:linear-gradient(90deg,color-mix(in srgb,var(--s-today) 40%,var(--surface)),var(--s-today) 85%)}
+.bar.destroyed,.g-destroyed{background:var(--s-destroyed);background:linear-gradient(90deg,color-mix(in srgb,var(--s-destroyed) 40%,var(--surface)),var(--s-destroyed) 85%)}
+.bar.delayed,.g-delayed{background:var(--s-delayed);background:linear-gradient(90deg,color-mix(in srgb,var(--s-delayed) 40%,var(--surface)),var(--s-delayed) 85%)}
+.bar.today.neg{background:var(--s-today);background:linear-gradient(270deg,color-mix(in srgb,var(--s-today) 40%,var(--surface)),var(--s-today) 85%)}
+.bar.destroyed{animation-delay:calc(var(--i,0) * 45ms + 140ms)}
+.bar.delayed{animation-delay:calc(var(--i,0) * 45ms + 320ms)}
+@keyframes growX{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes draw{to{stroke-dashoffset:0}}
+.track .tip-lab{animation:fadeIn .45s ease both;animation-delay:calc(var(--i,0) * 45ms + 600ms)}
+.cds-anim path.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1.4s cubic-bezier(.3,.6,.3,1) forwards}
+.cds-anim circle.pt{animation:fadeIn .4s ease 1.1s both}
+.meter span{transition:background-color .3s}
+.pending .bar,.pending .track .tip-lab,.pending .cds-anim path.draw,.pending .cds-anim circle.pt{animation-play-state:paused}
+@media (prefers-reduced-motion: reduce){
+  .bar,.track .tip-lab,.cds-anim circle.pt{animation:none!important}
+  .cds-anim path.draw{animation:none!important;stroke-dasharray:none;stroke-dashoffset:0}
+  .meter span{transition:none}
+}
+.bar.end{border-radius:0 4px 4px 0}
+.bar.neg{border-radius:4px 0 0 4px}
+.gap{flex:0 0 2px}
+.zero{flex:0 0 1px;align-self:stretch;background:var(--base)}
+.tip-lab{font-size:12px;color:var(--ink);margin-left:6px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tip-lab em{font-style:normal;color:var(--ink-2)}
+.after{font-size:13px;font-variant-numeric:tabular-nums;line-height:1.3}
+.after b{font-weight:600}
+.after small{display:block;font-size:12px;color:var(--ink-2)}
+.has-neg .plot{border-left:0}
+
+#tip{position:fixed;z-index:20;max-width:300px;background:var(--surface);color:var(--ink);border:1px solid var(--base);border-radius:6px;padding:10px 12px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.16);pointer-events:none;display:none}
+#tip h4{margin:0 0 6px;font-size:14px;font-weight:600}
+#tip dl{display:grid;grid-template-columns:auto auto;gap:2px 14px;margin:0;font-variant-numeric:tabular-nums}
+#tip dt{color:var(--ink-2)}
+#tip dd{margin:0;text-align:right}
+#tip p{margin-top:6px;color:var(--ink-2)}
+
+.credit-lede{color:var(--ink-2);max-width:72ch;margin-bottom:10px;font-size:14px}
+#cds-chart{width:100%}
+#cds-chart svg{display:block;width:100%;height:auto;overflow:visible}
+#cds-chart text{font-family:var(--font-body);font-size:12px;fill:var(--ink-2);font-variant-numeric:tabular-nums}
+#cds-chart text.end{fill:var(--ink);font-weight:500}
+.readings{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 24px;margin-top:14px;font-size:13px}
+.readings h3{display:flex;align-items:center;gap:6px}
+.readings table{min-width:0;font-size:13px}
+.readings td{padding:3px 6px 3px 0;border-bottom:1px solid var(--hair)}
+.readings td:first-child{color:var(--ink-2);white-space:nowrap}
+
+.fold > summary{list-style:none;cursor:pointer;margin-bottom:0;border-radius:6px}
+.fold > summary::-webkit-details-marker{display:none}
+.fold > summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+#story[open] > summary{margin-bottom:10px}
+.story-title{display:flex;flex-direction:column;gap:2px}
+.story-teaser{font-size:14px;color:var(--ink-2)}
+#story[open] .story-teaser{display:none}
+.tog{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--accent);white-space:nowrap}
+.tog::after{content:"";width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-2px);transition:transform .15s}
+.fold[open] > summary .tog::after{transform:rotate(-135deg) translateY(-1px)}
+.fold[open] > summary .tog-open, .fold:not([open]) > summary .tog-close{display:none}
+.fold-end{display:flex;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid var(--hair)}
+#watch{padding:12px 18px}
+.wl-sum{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px}
+.wl-sum .ws-lab{font-family:var(--font-display);font-weight:600;font-size:17px}
+.wl-sum .tog{margin-left:auto}
+.wl-body{margin-top:14px;padding-top:12px;border-top:1px solid var(--hair)}
+.wl-note{font-size:13px;color:var(--ink-2);margin-bottom:6px}
+.wl-actions .spacer{flex:1 1 auto}
+@media (prefers-reduced-motion: reduce){ .tog::after{transition:none} }
+.story-lede{color:var(--ink-2);max-width:72ch;font-size:14px;margin-bottom:6px}
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.step{display:grid;grid-template-columns:34px minmax(0,1fr) minmax(0,250px);gap:6px 18px;padding:14px 0;border-top:1px solid var(--hair)}
+.step .num{font-family:var(--font-display);font-weight:600;font-size:22px;line-height:1.1;color:var(--accent)}
+.step h3{margin:0 0 3px;font-size:16px}
+.step p{color:var(--ink-2);font-size:14px;max-width:64ch}
+.chips{font-size:13px;background:var(--wash);border-radius:6px;padding:8px 11px;align-self:start;line-height:1.4}
+.chips b{display:block;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);font-weight:600;margin-bottom:3px}
+.fork{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:10px}
+.branch{display:block;width:100%;text-align:left;font:inherit;line-height:1.5;background:var(--surface);border:1px solid var(--base);border-radius:6px;padding:10px 12px 10px 14px;font-size:14px;color:var(--ink-2);cursor:pointer}
+.branch:hover{background:var(--wash)}
+.branch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.branch[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 4px 0 0 var(--accent);background:var(--wash)}
+.branch .bt{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline;margin:0 0 4px;font-size:14px;font-weight:600;color:var(--ink)}
+.branch .bt small{font-weight:500;font-size:12px;color:var(--ink-2)}
+.branch .pick{margin-left:auto;font-size:12px;font-weight:500;color:var(--accent)}
+.branch .res{display:block;margin-top:6px;color:var(--ink);font-variant-numeric:tabular-nums}
+.fork-hint{font-size:13px;color:var(--ink-2);margin-top:8px}
+.takeaways h3 small{font-family:var(--font-body);font-weight:500;font-size:12px;color:var(--ink-2);margin-left:6px}
+.takeaways{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px 28px;margin-top:6px;padding-top:14px;border-top:1px solid var(--hair);font-size:14px}
+.takeaways ul,.takeaways ol{margin:0;padding-left:18px;color:var(--ink-2)}
+.takeaways li{margin-bottom:4px}
+.why{font-size:14px;color:var(--ink-2);margin:-2px 0 10px;max-width:74ch}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+.pill i{width:10px;height:10px;border-radius:50%;display:inline-block;flex:0 0 auto}
+.pill i.quiet{background:var(--st-quiet)} .pill i.warn{background:var(--st-warn)} .pill i.crit{background:var(--st-crit)}
+#watch,#overview,#chain-of-events{scroll-margin-top:84px}
+.verdict{font-size:15px;margin-bottom:12px;max-width:74ch}
+.verdict b{font-weight:600}
+.wl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px 28px}
+.wl-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px;margin-bottom:6px}
+.wl-head h3{margin:0;font-size:16px}
+.meter{display:flex;gap:3px;margin:6px 0 4px}
+.meter span{flex:1 1 0;height:8px;border-radius:2px;background:var(--wash)}
+.meter span.on.quiet{background:var(--st-quiet)} .meter span.on.warn{background:var(--st-warn)} .meter span.on.crit{background:var(--st-crit)}
+.rule{font-size:12px;color:var(--ink-2);margin-bottom:6px}
+.wl{list-style:none;margin:0;padding:0}
+.wl li{border-top:1px solid var(--hair)}
+.wl label{display:grid;grid-template-columns:22px minmax(0,1fr);gap:2px 10px;padding:9px 4px;cursor:pointer;border-radius:4px}
+.wl label:hover{background:var(--wash)}
+.wl input{width:18px;height:18px;margin:2px 0 0;accent-color:var(--accent);cursor:pointer}
+.wl input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wl .it{font-size:14px;line-height:1.4}
+.wl .nt{grid-column:2;font-size:12px;color:var(--ink-2);line-height:1.4}
+.dec{display:inline-block;font-size:11px;font-weight:600;color:var(--ink-2);border:1px solid var(--base);border-radius:3px;padding:0 5px;margin-left:6px;vertical-align:1px}
+.wl-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--hair)}
+.btn{font:inherit;font-size:13px;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--base);border-radius:6px;padding:6px 12px;cursor:pointer}
+.btn:hover{background:var(--wash)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums;min-width:860px}
+th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--hair);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+thead th{font-weight:600;color:var(--ink-2);vertical-align:bottom;border-bottom:1px solid var(--base)}
+thead .grp th{text-align:center;border-bottom:0;padding-bottom:0}
+tr.layer td{font-weight:600;background:var(--wash)}
+td.dbar{position:relative;min-width:128px;padding-left:10px}
+td.dbar .db{position:absolute;right:4px;top:5px;bottom:5px;border-radius:3px;z-index:0;transform-origin:right center;animation:growX .6s cubic-bezier(.2,.75,.25,1) both}
+td.dbar .db.dn{background:color-mix(in srgb,var(--st-crit) 32%,transparent)}
+td.dbar .db.up{background:color-mix(in srgb,#0aac23 32%,transparent)}
+td.dbar .v{position:relative;z-index:1;padding-right:4px}
+@media (prefers-reduced-motion: reduce){ td.dbar .db{animation:none} }
+tr.total td{font-weight:600;border-top:1px solid var(--base)}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px 28px;font-size:14px}
+.notes ul{margin:0;padding-left:18px;color:var(--ink-2)}
+.notes li{margin-bottom:4px}
+a{color:var(--accent)}
+@media (max-width:720px){
+  h1{font-size:27px}
+  .row{grid-template-columns:minmax(0,1fr)}
+  .after small{display:inline;margin-left:6px}
+  .bar-row{position:static}
+  .legend{margin-left:0}
+  .step{grid-template-columns:26px minmax(0,1fr)}
+  .step .chips{grid-column:2}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <nav class="lang" aria-label="语言"><a href="../index.html" lang="en">EN</a><a href="../tc/index.html" lang="zh-Hant">繁</a><a href="index.html" lang="zh-Hans" aria-current="page">简</a></nav>
+    <h1>AI 热潮爆破：芯片产业链的利润蒸发与递延</h1>
+    <p class="lede">半导体利润池的悲观情景地图。每个子行业都把今日的经营利润，与谷底年度将会蒸发或递延的利润并列，并分两种爆破情景比较。所有数字均为估算，单位为十亿美元。</p>
+    <div class="chain" id="chain" aria-label="情景次序"></div>
+  </header>
+
+  <section class="tiles" id="tiles" aria-label="利润池摘要"></section>
+
+  <section class="card" id="watch">
+   <details id="watchd" class="fold">
+    <summary class="wl-sum">
+      <span class="ws-lab">观察清单</span>
+      <span class="pill" id="ws-fin"></span>
+      <span class="pill" id="ws-full"></span>
+      <span class="tog"><span class="tog-open">展开观察清单</span><span class="tog-close">收起</span></span>
+    </summary>
+    <div class="wl-body">
+      <p class="wl-note">勾选已经发生的事项。预先勾选的项目为截至2026年11月25日已达成的信号。你的勾选只会保存在此浏览器。</p>
+      <p class="verdict" id="verdict"></p>
+      <div class="wl-grid">
+        <div id="wl-fin"></div>
+        <div id="wl-full"></div>
+      </div>
+      <div class="wl-actions">
+        <button type="button" class="btn primary" id="wl-show"></button>
+        <button type="button" class="btn" id="wl-reset">重置为11月25日读数</button>
+        <button type="button" class="btn" id="wl-clear">全部清除</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" id="wl-close">收起观察清单</button>
+      </div>
+    </div>
+   </details>
+  </section>
+
+  <section class="card" id="chain-of-events">
+   <details id="story" class="fold">
+    <summary class="card-head">
+      <span class="story-title"><h2>连锁反应如何展开</h2><span class="story-teaser">由信贷收紧到产业链出清的六个步骤，以及两个情景的分岔点。</span></span>
+      <span class="tog"><span class="tog-open">显示推演逻辑</span><span class="tog-close">收起</span></span>
+    </summary>
+    <p class="story-lede">爆破始于信贷，而非使用量。规模较小、杠杆较高的买家先倒下，围绕 OpenAI 的融资链随后断裂；损害有多大，取决于一个问题：已经装好的算力会否变成过剩。</p>
+    <ol class="steps">
+      <li class="step"><span class="num">1</span><div><h3>资金成本上升</h3><p>美联储于9月加息，是2023年以来首次；10年期美国国债收益率高于5%，市场预期加息延续至2027年。今次没有减息缓冲，而正是减息，令2001年及2008年的融资冲击没有演变成需求冲击。</p></div><div class="chips"><b>对芯片的影响</b>暂时未有。订单仍反映去年的计划。</div></li>
+      <li class="step"><span class="num">2</span><div><h3>边际买家失去资金</h3><p>以创投资金购买算力的 AI 初创企业（我们估计每年约650亿至1,050亿美元）削减开支。没有收入的模型训练初创几乎全面停止；应用层初创只会失去原本靠融资补贴亏损的部分。直接计算，这只占本页损失的5%至15%，但这些初创正是新云（neocloud）的客户。</p></div><div class="chips"><b>对芯片的影响</b>新云的使用率及续约价格转弱。</div></li>
+      <li class="step"><span class="num">3</span><div><h3>新云无法再融资</h3><p>新云以平均约三年的客户合约作抵押，借入约五年期的贷款，即贷款人其实在押注续约。一旦信用违约互换息差突破1,000基点，市场便视之为困境信贷，再融资渠道随即关闭。</p></div><div class="chips"><b>对芯片的影响</b>英伟达增长最快的一群客户停止下单。</div></li>
+      <li class="step"><span class="num">4</span><div><h3>融资链断裂</h3><p>OpenAI 依赖以未来收入为基础筹集的资本。软银以过桥贷款及保证金贷款为其持股融资。甲骨文签订了2,880亿美元的数据中心租约，主要用于 OpenAI 的场址。任何一环断裂，其余环节都会跟随。甲骨文以放弃新建项目求存，把损失转嫁予开发商及其贷款人。</p></div><div class="chips"><b>对芯片的影响</b>OpenAI 与博通、AMD 及英伟达的芯片计划告吹，为其签下的算力合约亦一并落空。</div></li>
+      <li class="step"><span class="num">5</span><div><h3>分岔点：已装算力是短缺还是过剩？</h3><p>这决定冲击会否只停留在金融层面，还是蔓延至需求。触发因素是什么并不太重要，关键是已经运行的芯片会否变成过剩。2001年的电讯业爆破同样由融资引发，但当时光纤已被重复过度兴建多倍。</p>
+        <p class="fork-hint">选择一条路径。它会设定第6步、要点总结及下方所有图表，效果与情景开关相同。</p>
+        <div class="fork" role="group" aria-label="情景">
+          <button type="button" class="branch" id="br-fin" data-scen="fin" aria-pressed="false"><span class="bt">融资主导 <small>信贷市场目前定价的情景</small><span class="pick" id="pk-fin"></span></span>使用量持续增长。现金充裕的买家接手被收回的场址，租金价格守得住，超大规模云厂商维持资本开支不变。损失主要是错失的增长。<span class="res" id="fk-fin"></span></button>
+          <button type="button" class="branch" id="br-full" data-scen="full" aria-pressed="false"><span class="bt">全面崩溃 <small>若被迫卖家抛售算力</small><span class="pick" id="pk-full"></span></span>面对赎回压力的贷款人及基金，只要高于电费便以任何价格出租算力。Token价格跌得比使用量增长更快，AI 实验室收入下跌，超大规模云厂商削减开支。<span class="res" id="fk-full"></span></button>
+        </div></div><div class="chips"><b>对芯片的影响</b>决定下方所有数字的规模。</div></li>
+      <li class="step" id="step6"><span class="num">6</span><div><h3 id="s6-h"></h3><p id="s6-p"></p></div><div class="chips"><b>对芯片的影响</b><span id="s6-c"></span></div></li>
+    </ol>
+    <div class="takeaways">
+      <div>
+        <h3>损失来自哪里<small id="loss-scen"></small></h3>
+        <ul id="losses"></ul>
+      </div>
+      <div>
+        <h3>什么会令融资主导演变成全面崩溃</h3>
+        <ol>
+          <li>GPU 租金下跌，尤其是一年期合约。</li>
+          <li>AI 实验室下调Token价格，但收入增长没有加快。</li>
+          <li>私募信贷基金限制赎回，或以 GPU 作抵押的贷款跌至约80美分以下。</li>
+          <li>存储合约价格见顶回落。</li>
+          <li>超大规模云厂商以“消化期”形容资本开支，或为 GPU 减记。</li>
+          <li>失业率上升，企业软件公司下调指引。</li>
+        </ol>
+        <p style="color:var(--ink-2);margin-top:6px">头两项是关键。只要租金及每个Token的收入守得住，融资冲击就只会是融资冲击。两组信号可在<a href="#watch">观察清单</a>追踪。</p>
+      </div>
+    </div>
+    <div class="fold-end"><button type="button" class="btn" id="story-close">收起推演逻辑</button></div>
+   </details>
+  </section>
+
+  <div class="bar-row">
+    <div class="ctl"><span>情景</span>
+      <div class="seg" role="group" aria-label="情景">
+        <button type="button" id="btn-full" aria-pressed="true">全面崩溃</button>
+        <button type="button" id="btn-fin" aria-pressed="false">融资主导</button>
+      </div>
+    </div>
+    <div class="ctl"><span>指标</span>
+      <div class="seg" role="group" aria-label="指标">
+        <button type="button" id="btn-profit" aria-pressed="true">经营利润</button>
+        <button type="button" id="btn-revenue" aria-pressed="false">收入</button>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <section class="card" id="overview">
+    <div class="card-head"><h2>按层级</h2><span class="sum">六个层级共用同一比例尺</span></div>
+    <div class="rows" id="overview-rows"></div>
+  </section>
+
+  <div id="panels" style="display:flex;flex-direction:column;gap:20px"></div>
+
+  <section class="card" id="credit">
+    <div class="card-head"><h2>信贷市场在定价什么</h2><span class="sum">五年期信用违约互换息差，基点，对数刻度</span></div>
+    <p class="credit-lede">高杠杆企业的息差扩阔，但算力租金及 AI 实验室收入仍在上升。这个组合符合融资主导情景。线条连接的是报道中的读数，并非每日收盘价。</p>
+    <div class="legend" id="cds-legend" style="margin:0 0 6px"></div>
+    <div id="cds-chart" role="img" aria-label="CoreWeave、软银、甲骨文及英伟达由2025年12月至2026年11月的五年期信用违约互换息差折线图"></div>
+    <div class="readings" id="cds-readings"></div>
+  </section>
+
+  <section class="card" id="table-view">
+    <div class="card-head"><h2>表格</h2><span class="sum" id="table-sum">每年十亿美元</span></div>
+    <div class="tablewrap"><table id="tbl"></table></div>
+  </section>
+
+  <section class="card" id="method">
+    <div class="card-head"><h2>阅读说明</h2></div>
+    <div class="notes">
+      <div>
+        <h3>两个情景</h3>
+        <ul>
+          <li><b>全面崩溃：</b>高杠杆买家倒下，使用量同样令人失望。被收回的算力涌入租赁市场，超大规模云厂商削减开支。</li>
+          <li><b>融资主导：</b>高杠杆买家的信贷渠道关闭，但使用量持续增长。新建项目停止，已装算力仍然短缺，现金充裕的买家接手场址。</li>
+          <li>两个情景下，OpenAI 的远期订单都会落空。压力点集中在2027年上半年：软银的过桥贷款、OpenAI 延后的上市，以及甲骨文的融资计划。</li>
+        </ul>
+      </div>
+      <div>
+        <h3>各条柱代表什么</h3>
+        <ul>
+          <li><b>今日</b>为2026年预估，以前三季度已公布业绩为基础。</li>
+          <li><b>蒸发或递延</b>为2028年基准情景减去谷底年度。基准高于今日，因此损失可以大于今日的利润池。</li>
+          <li><b>蒸发</b>是不会回来的价格、利润率及订单。<b>递延</b>是推迟至2030年至2032年的开支。</li>
+          <li>利润池可跨层级相加，收入则不可以。</li>
+        </ul>
+      </div>
+      <div>
+        <h3>局限及数据依据</h3>
+        <ul>
+          <li>2028年基准延伸自供应商指引，而这些指引的总和已超过买家公布的资本开支所能吸收的水平。</li>
+          <li>标有<span class="rough">粗估</span>的行没有已公布数据作依据。英特尔代工业务的收入大部分来自集团内部。</li>
+          <li>今日数字：<a href="https://news.samsung.com/global/samsung-electronics-announces-third-quarter-2026-results">三星</a>、<a href="https://www.storagenewsletter.com/?p=306409">SK 海力士</a>、美光、英伟达、<a href="https://www.fierce-network.com/broadband/broadcom-predicts-ai-chip-revenue-double-2027">博通</a>、<a href="https://www.spglobal.com/market-intelligence/en/news-insights/research/2026/10/data-center-strength-powers-amd-s-revenue-in-q3">AMD</a>、<a href="https://www.intc.com/news-events/press-releases/detail/1786/intel-reports-third-quarter-2026-financial-results">英特尔</a>及<a href="https://www.trendforce.com/news/2026/10/16/news-after-tsmcs-3q26-earnings-key-brokerage-takeaways-as-2028-capex-forecasts-reach-us105b/">台积电</a>第三季度业绩；<a href="https://www.trendforce.com/presscenter/news/20260529-13068.html">TrendForce</a>、<a href="https://www.wsts.org/esraCMS/extension/media/f/WST/7618/WSTS_FC-Release-2026-May.pdf">WSTS</a>及 SEMI 预测。</li>
+          <li>连锁反应：9月加息及5%收益率参考 <a href="https://international.schwab.com/es/node/14401">Schwab</a>；甲骨文10-Q租约附注参考<a href="https://levelup.gitconnected.com/oracle-signed-288b-of-leases-then-came-the-jupiter-notice-5767a9aba5e4">此摘要</a>；CoreWeave 8月贷款条款参考 <a href="https://theenergymag.com/news/2026-08-11/coreweave-ai-2-6-billion-wider-spread/">The Energy Mag</a>。初创企业开支规模为我们根据 Crunchbase、Dealroom 及已公布年化收入作出的估算。</li>
+          <li>息差：引用 ICE、Markit、LSEG 及标普全球数据的新闻报道，包括 <a href="https://www.investing.com/news/stock-market-news/ai-credit-default-swap-spreads-widen-on-unease-over-cash-flow-5049729">路透社</a>、<a href="https://www.cnbc.com/2026/10/15/coreweave-credit-default-swaps-hit-distress-levels-as-investors-sour-on-ai-debt.html">CNBC</a> 及 <a href="https://www.bloomberg.com/news/articles/2026-03-27/oracle-s-credit-risk-measure-nears-record-high-on-ai-debt-fears">彭博</a>。不同数据商的读数相差数个基点。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+<div id="tip" role="status"></div>
+
+<script>
+/* r = revenue, p = operating profit; 26 = 2026 estimate, b = 2028 base.
+   full / fin = trough year under each scenario: rt, pt = trough revenue and profit;
+   pds, rds = share of the profit / revenue loss that is destroyed rather than delayed. */
+var LAYERS = [
+ {id:"memory", why:"受价格打击。利润率处于商品周期高峰，加速器订单下跌时，HBM 晶圆会回流成为一般供应。", name:"存储", rows:[
+  {n:"DRAM（不含 HBM）", who:"三星、SK 海力士、美光", r26:520, rb:720, p26:375, pb:520,
+   full:{rt:300, pt:60, pds:.90, rds:.85, how:"HBM 晶圆回流成为商品供应。利润率由约72%跌至20%。"},
+   fin:{rt:480, pt:240, pds:.85, rds:.80, how:"服务器需求减少15%至25%，便足以令轻微短缺转为过剩。利润率跌至约50%。"}},
+  {n:"HBM", who:"SK 海力士、三星、美光", r26:100, rb:180, p26:60, pb:108, rough:true,
+   full:{rt:95, pt:33, pds:.60, rds:.50, how:"出货量跟随加速器数量。合约重新议价，一如2019年及2023年。"},
+   fin:{rt:140, pt:70, pds:.40, rds:.35, how:"出货量随加速器订单减少而下跌，价格大致守得住。"}},
+  {n:"NAND 及固态硬盘", who:"三星、铠侠、闪迪、SK 海力士", r26:271, rb:400, p26:163, pb:232,
+   full:{rt:180, pt:18, pds:.89, rds:.85, how:"新产能投产之际企业级固态硬盘需求下跌。利润率由约58%跌至10%。"},
+   fin:{rt:280, pt:98, pds:.80, rds:.75, how:"新产能遇上服务器建设放缓。利润率跌至约35%。"}}
+ ]},
+ {id:"compute", why:"受失去的计划及买家议价能力打击。OpenAI 的自研芯片及 AMD 计划告吹；英伟达靠超大规模云厂商保住出货量，但要让出利润率。", name:"运算", rows:[
+  {n:"商用 GPU", who:"英伟达", r26:423, rb:900, p26:270, pb:575,
+   full:{rt:495, pt:248, pds:.50, rds:.50, how:"出货量较基准少约40%。买家议价能力令利润率由约64%降至50%。"},
+   fin:{rt:680, pt:394, pds:.35, rds:.35, how:"新云及 AI 实验室的订单消失，超大规模云厂商及 SpaceX 接手腾出的配额。"}},
+  {n:"AMD AI GPU", who:"AMD", r26:14, rb:50, p26:3.5, pb:16,
+   full:{rt:17.5, pt:2, pds:.70, rds:.70, how:"失去主要客户及大部分新云客户。"},
+   fin:{rt:28, pt:5.6, pds:.70, rds:.70, how:"两个情景下 OpenAI 计划都会告吹。"}},
+  {n:"定制 AI 芯片", who:"博通、Marvell、联发科", r26:72, rb:270, p26:40, pb:148,
+   full:{rt:165, pt:79, pds:.58, rds:.57, how:"OpenAI 计划告吹，超大规模云厂商的自研芯片较为稳健。"},
+   fin:{rt:200, pt:104, pds:.70, rds:.70, how:"OpenAI 计划告吹，Google、Meta 及 Anthropic 的出货量延续。"}},
+  {n:"服务器 CPU", who:"英特尔、AMD", r26:42, rb:75, p26:10.5, pb:22.5,
+   full:{rt:54, pt:12, pds:.30, rds:.25, how:"AI 带动的服务器需求放缓。存储价格下跌带来的个人电脑复苏未有计入。"},
+   fin:{rt:66, pt:17.8, pds:.20, rds:.20, how:"使用量持续增长，一般服务器需求大致守得住。"}}
+ ]},
+ {id:"networking", why:"相对原定计划跌幅最大。订单假设 GPU 更多、每个 GPU 配的光模块也更多；两者同时下跌，为锁定激光器而重复下的订单亦要回吐。", name:"网络", rows:[
+  {n:"光模块", who:"中际旭创、新易盛、Coherent、Lumentum", r26:36, rb:85, p26:10, pb:24,
+   full:{rt:36, pt:4.3, pds:.30, rds:.20, how:"交货期最短、重复下单最多，其后要去库存。"},
+   fin:{rt:56, pt:11.2, pds:.20, rds:.15, how:"即使使用量无损，重复订单仍会回吐。"}},
+  {n:"连接芯片", who:"Marvell、Credo、Astera", r26:14, rb:32, p26:5, pb:12, rough:true,
+   full:{rt:16, pt:4, pds:.25, rds:.20, how:"重定时器、信号处理器及线缆跟随机柜出货量。"},
+   fin:{rt:23, pt:7.4, pds:.20, rds:.15, how:"随机柜出货量下跌约四分之一。"}}
+ ]},
+ {id:"foundry", why:"有积压订单及手机业务缓冲。台积电的 AI 晶圆下跌；三星及英特尔的第二供应商计划推迟一年或以上。", name:"晶圆代工", rows:[
+  {n:"台积电", who:"先进制程晶圆及封装", r26:176, rb:280, p26:100, pb:157,
+   full:{rt:222, pt:107, pds:.25, rds:.20, how:"AI 晶圆及封装下跌约40%，手机及个人电脑略为弥补。"},
+   fin:{rt:252, pt:134, pds:.15, rds:.15, how:"AI 晶圆下跌约20%，产能分配溢价消退。"}},
+  {n:"三星代工", who:"2纳米及 HBM 基底芯片", r26:20, rb:30, p26:0.5, pb:4, rough:true,
+   full:{rt:20, pt:-1, pds:.20, rds:.20, how:"超大规模云厂商的第二供应商计划推迟，Tesla 及 SpaceX 的芯片是缓冲。"},
+   fin:{rt:25, pt:1.5, pds:.20, rds:.20, how:"第二供应商计划推迟一年。"}},
+  {n:"英特尔代工", who:"主要为集团内部晶圆", r26:24, rb:32, p26:-8, pb:-3,
+   full:{rt:26, pt:-9, pds:0, rds:0, how:"外部客户延后，收支平衡的时间表因而推迟。"},
+   fin:{rt:29, pt:-6, pds:0, rds:0, how:"外部客户延后，内部出货量守得住。"}}
+ ]},
+ {id:"equipment", why:"反应滞后。存储厂商削减资本开支，存储设备最先下跌；光刻因有积压订单最后才跌。", name:"设备", rows:[
+  {n:"晶圆设备（存储）", who:"泛林、应用材料、东京电子、阿斯麦", r26:60, rb:85, p26:20, pb:29,
+   full:{rt:42, pt:10, pds:.25, rds:.25, how:"存储资本开支在两个季度内减半。"},
+   fin:{rt:62, pt:18, pds:.20, rds:.20, how:"价格转势后，存储厂商缩减扩产。"}},
+  {n:"晶圆设备（代工及逻辑）", who:"阿斯麦、应用材料、科磊、东京电子、泛林", r26:84, rb:115, p26:29, pb:40,
+   full:{rt:86, pt:21, pds:.20, rds:.20, how:"台积电削减资本开支约40%，光刻因积压订单而滞后。"},
+   fin:{rt:100, pt:31, pds:.15, rds:.15, how:"台积电略减资本开支，积压订单为首年提供缓冲。"}},
+  {n:"后段设备", who:"爱德万、泰瑞达、迪思科、Besi", r26:25, rb:29, p26:7, pb:8,
+   full:{rt:14.5, pt:1.7, pds:.20, rds:.15, how:"测试及封装订单最先、最快下跌。"},
+   fin:{rt:21, pt:4.2, pds:.15, rds:.15, how:"封装扩产暂停。"}}
+ ]},
+ {id:"materials", why:"与出货量挂钩。短暂去库存，然后最先复苏。", name:"材料", rows:[
+  {n:"载板及电路板", who:"揖斐电、欣兴、景硕", r26:22, rb:32, p26:4, pb:6, rough:true,
+   full:{rt:21, pt:2, pds:.25, rds:.20, how:"为2027年承诺的产能在下行期投产。"},
+   fin:{rt:26, pt:3.8, pds:.20, rds:.20, how:"新产能遇上出货量放缓。"}},
+  {n:"制程材料", who:"光刻胶、电镀液、研磨液、矽晶圆", r26:14, rb:18, p26:2.8, pb:3.6, rough:true,
+   full:{rt:14, pt:2.2, pds:.10, rds:.10, how:"与出货量挂钩。两至三个季度去库存，然后最先复苏。"},
+   fin:{rt:16, pt:3, pds:.10, rds:.10, how:"短暂去库存。"}}
+ ]}
+];
+var CHAINS = {
+  full:["新云倒闭","OpenAI 及软银倒下","甲骨文停止新建项目","使用量令人失望，超大规模云厂商削减开支"],
+  fin:["高杠杆买家的信贷渠道关闭","新云、OpenAI 及软银倒下","甲骨文停止新建项目","使用量持续增长，超大规模云厂商维持资本开支不变"]
+};
+
+var STEP6 = {
+  full:{h:"产业链剧烈出清",
+    p:"被收回的算力涌入租赁市场，连超大规模云厂商也要削减开支。存储在一个季度内重新定价，利润率跌向20%。光模块及后段设备回吐重复订单。英伟达及博通选择减价而非累积存货。台积电及光刻最后下跌，有积压订单缓冲。芯片价格下跌其后拉低每吉瓦成本，令以现金出资的买家在一至两年内回归。",
+    c:"深但短的出清：GPU 四至五年便耗损，光纤却可用数十年。"},
+  fin:{h:"增长重设，价格大致守得住",
+    p:"订单由高杠杆买家转到以现金出资的买家：超大规模云厂商及 SpaceX 接手腾出的 GPU 配额，已装算力保持满载。存储由轻微短缺转为过剩，利润率大约减半而非崩溃。光模块及后段设备仍要回吐重复订单。台积电略减资本开支，积压订单为首年提供缓冲。由于算力仍然短缺，信贷一重开，采购便会恢复。",
+    c:"是增长落空，不是崩溃。大部分层级在谷底年度的利润接近今日水平。"}
+};
+function layerShares(){
+  var tot=0, out={}; LAYERS.forEach(function(L){ var a=agg(L.rows), h=a.pb-a.pt; out[L.id]=h; tot+=h; });
+  for(var k in out) out[k]=Math.round(out[k]/tot*100); return out;
+}
+function lossItems(){
+  var sh=layerShares();
+  var tail = sh.foundry+sh.equipment+sh.materials;
+  if(scen==="full") return [
+    ["存储定价", "占损失利润的"+sh.memory+"%。利润率由商品周期高峰跌向20%，损失来自价格而非出货量。"],
+    ["运算", "占"+sh.compute+"%：OpenAI 的计划告吹，买家议价能力令英伟达利润率由约64%降至50%。"],
+    ["晶圆代工、设备及材料", "合共占"+tail+"%，有积压订单及手机业务缓冲，但谷底时仍低于今日。"],
+    ["光模块", "金额不大，但相对原定计划跌幅最大：订单假设 GPU 更多、每个 GPU 配的光模块也更多，而被取消的训练集群正是用光模块最多的。"],
+    ["初创企业开支", "金额不大，却是触发点；它在预期增长中的占比，远高于在今日水平中的占比。"]];
+  return [
+    ["存储", "仍占损失利润的"+sh.memory+"%。服务器需求减少15%至25%，便令轻微短缺转为过剩；利润率减半而非崩溃。"],
+    ["运算", "占"+sh.compute+"%，主要来自 OpenAI 告吹的计划。英伟达的出货转向超大规模云厂商及 SpaceX，利润率大致守得住。"],
+    ["晶圆代工、设备及材料", "合共占"+tail+"%，主要是失去增长：谷底利润接近或高于今日。"],
+    ["光模块", "相对原定计划跌幅仍然最大，因为即使使用量无损，重复订单仍会回吐。"],
+    ["初创企业开支", "金额不大，却是触发点；它在预期增长中的占比，远高于在今日水平中的占比。"]];
+}
+var revealIO=null;
+function armReveal(){
+  if(!("IntersectionObserver" in window)) return;
+  if(revealIO) revealIO.disconnect();
+  revealIO=new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.remove("pending"); revealIO.unobserve(e.target); } }); },{threshold:0.12});
+  var cards=[document.getElementById("overview"),document.getElementById("credit")].concat(Array.prototype.slice.call(document.querySelectorAll("#panels > .card")));
+  cards.forEach(function(c){
+    var r=c.getBoundingClientRect(), off=r.top>innerHeight-40||r.bottom<0;
+    c.classList.toggle("pending",off); if(off) revealIO.observe(c);
+  });
+}
+window.addEventListener("beforeprint",function(){ Array.prototype.forEach.call(document.querySelectorAll(".pending"),function(c){ c.classList.remove("pending"); }); });
+var mode="profit", scen="full";
+function vals(d){
+  if(d._agg) return d;
+  var s=d[scen]; return {n:d.n,who:d.who,rough:d.rough,r26:d.r26,rb:d.rb,rt:s.rt,p26:d.p26,pb:d.pb,pt:s.pt,pds:s.pds,rds:s.rds,how:s.how};
+}
+function derive(x){
+  var d=vals(x), P=mode==="profit", now=P?d.p26:d.r26, base=P?d.pb:d.rb, tr=P?d.pt:d.rt, ds=P?d.pds:d.rds, hit=base-tr;
+  return {d:d, now:now, base:base, tr:tr, hit:hit, destroyed:hit*ds, delayed:hit*(1-ds)};
+}
+function agg(rows){
+  var o={_agg:true,n:"",r26:0,rb:0,rt:0,p26:0,pb:0,pt:0,pD:0,rD:0};
+  rows.forEach(function(x){ var d=vals(x); o.r26+=d.r26;o.rb+=d.rb;o.rt+=d.rt;o.p26+=d.p26;o.pb+=d.pb;o.pt+=d.pt;o.pD+=(d.pb-d.pt)*d.pds;o.rD+=(d.rb-d.rt)*d.rds; });
+  o.pds=o.pD/(o.pb-o.pt); o.rds=o.rD/(o.rb-o.rt); return o;
+}
+function fmt(v){
+  var a=Math.abs(v), s = a>=10 ? String(Math.round(a)) : (Math.round(a*10)/10).toFixed(1).replace(/\.0$/,"");
+  return (v<0 && s!=="0" ? "−" : "") + s;
+}
+function fmtT(v){ return (v/1000).toFixed(2)+"万亿美元"; }
+function pct(a,b){ var p=Math.round((a/b-1)*100); return (p>0?"+":p<0?"−":"")+Math.abs(p)+"%"; }
+function el(tag,cls,txt){ var e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; }
+
+function buildRow(x, sc, idx){
+  var v=derive(x), d=v.d, row=el("div","row"); row.tabIndex=0; row.style.setProperty("--i", idx||0);
+  var name=el("div","name"); name.appendChild(document.createTextNode(d.n));
+  if(d.rough) name.appendChild(el("span","rough","粗估"));
+  if(d.who) name.appendChild(el("small",null,d.who));
+  row.appendChild(name);
+  var plot=el("div","plot");
+  function track(){ var t=el("div","track"); plot.appendChild(t); return t; }
+  function spacer(t,p){ var s=el("div"); s.style.flex="0 0 "+p+"%"; t.appendChild(s); }
+  var F=window.innerWidth<720?62:78, W=function(q){ return Math.abs(q)/sc.span*F; }, z=sc.neg/sc.span*F;
+  var t1=track();
+  if(v.now<0){ spacer(t1, z-W(v.now)); var b=el("div","bar today neg"); b.style.width=W(v.now)+"%"; t1.appendChild(b); if(sc.neg) t1.appendChild(el("div","zero")); }
+  else { if(sc.neg){ spacer(t1,z); t1.appendChild(el("div","zero")); } var b1=el("div","bar today end"); b1.style.width=W(v.now)+"%"; t1.appendChild(b1); }
+  t1.appendChild(el("span","tip-lab",fmt(v.now)));
+  var t2=track();
+  if(sc.neg){ spacer(t2,z); t2.appendChild(el("div","zero")); }
+  var hasDel=v.delayed>0.05, hasDes=v.destroyed>0.05;
+  if(hasDes){ var b2=el("div","bar destroyed"+(hasDel?"":" end")); b2.style.width=W(v.destroyed)+"%"; t2.appendChild(b2); }
+  if(hasDes&&hasDel) t2.appendChild(el("div","gap"));
+  if(hasDel){ var b3=el("div","bar delayed end"); b3.style.width=W(v.delayed)+"%"; t2.appendChild(b3); }
+  var lab=el("span","tip-lab",fmt(v.hit)+" "); lab.appendChild(el("em",null,"("+fmt(v.destroyed)+" + "+fmt(v.delayed)+")")); t2.appendChild(lab);
+  row.appendChild(plot);
+  var after=el("div","after"); after.appendChild(el("b",null,"谷底 "+fmt(v.tr)));
+  after.appendChild(el("small",null, v.now<=0 ? "今日为 "+fmt(v.now) : v.tr<0 ? "转为亏损" : "较今日 "+pct(v.tr,v.now)));
+  row.appendChild(after);
+  function tipAt(px,py){
+    var what = mode==="profit" ? "经营利润" : "收入";
+    var pairs=[["今日"+what+"（2026年预估）",fmt(v.now)],["2028年基准情景",fmt(v.base)],["谷底年度",fmt(v.tr)],["蒸发",fmt(v.destroyed)],["递延",fmt(v.delayed)]];
+    if(d.r26) pairs.push(["利润率：今日至谷底",Math.round(d.p26/d.r26*100)+"% 至 "+Math.round(d.pt/d.rt*100)+"%"]);
+    showTip(d.n,pairs,d.how,px,py);
+  }
+  row.addEventListener("pointermove",function(e){ tipAt(e.clientX,e.clientY); });
+  row.addEventListener("pointerleave",hideTip);
+  row.addEventListener("focus",function(){ var r=row.getBoundingClientRect(); tipAt(r.left+210,r.bottom-4); });
+  row.addEventListener("blur",hideTip);
+  return row;
+}
+function scaleFor(rows){
+  var mx=0, mn=0; rows.forEach(function(x){ var v=derive(x); mx=Math.max(mx,v.now,v.hit); mn=Math.min(mn,v.now); });
+  return {span:mx-mn, neg:-mn};
+}
+var tip=document.getElementById("tip");
+function showTip(title,pairs,note,x,y){
+  tip.textContent=""; tip.appendChild(el("h4",null,title));
+  var dl=el("dl"); pairs.forEach(function(p){ dl.appendChild(el("dt",null,p[0])); dl.appendChild(el("dd",null,p[1])); }); tip.appendChild(dl);
+  if(note) tip.appendChild(el("p",null,note));
+  tip.style.display="block";
+  var w=tip.offsetWidth, h=tip.offsetHeight, vw=window.innerWidth, vh=window.innerHeight;
+  var left=Math.min(Math.max(8,x+14),vw-w-8), top=y+16; if(top+h>vh-8) top=Math.max(8,y-h-12);
+  tip.style.left=left+"px"; tip.style.top=top+"px";
+}
+function hideTip(){ tip.style.display="none"; }
+
+function tiles(){
+  var all=[]; LAYERS.forEach(function(L){ all=all.concat(L.rows); });
+  var a=agg(all), hit=a.pb-a.pt, mem=agg(LAYERS[0].rows), memHit=mem.pb-mem.pt;
+  var T=document.getElementById("tiles"); T.textContent="";
+  [["今日利润池（2026年预估）",fmtT(a.p26),"经营利润，全部层级",""],
+   ["2028年基准情景",fmtT(a.pb),"假设达到供应商指引",""],
+   ["谷底年度（"+(scen==="full"?"全面崩溃":"融资主导")+"）",fmtT(a.pt),"较今日 "+pct(a.pt,a.p26),""],
+   ["蒸发或递延",fmtT(hit),"蒸发 "+fmtT(a.pD)+"，递延 "+fmtT(hit-a.pD)+"。存储占 "+Math.round(memHit/hit*100)+"%。","key"]
+  ].forEach(function(t){ var d=el("div","tile "+t[3]); d.appendChild(el("div","lab",t[0])); d.appendChild(el("div","val",t[1])); d.appendChild(el("div","note",t[2])); T.appendChild(d); });
+}
+function table(){
+  var tb=document.getElementById("tbl"); tb.textContent="";
+  document.getElementById("table-sum").textContent=(scen==="full"?"全面崩溃":"融资主导")+"情景，每年十亿美元";
+  var th=el("thead"), g=el("tr","grp");
+  [["",1],["收入",4],["经营利润",6]].forEach(function(c){ var x=el("th",null,c[0]); x.colSpan=c[1]; g.appendChild(x); }); th.appendChild(g);
+  var hr=el("tr"); ["子行业","2026年预估","2028年基准","谷底","损失","今日","2028年基准","谷底","蒸发","递延","谷底较今日"].forEach(function(c){ hr.appendChild(el("th",null,c)); });
+  th.appendChild(hr); tb.appendChild(th);
+  var body=el("tbody"), all=[];
+  function line(x,cls){
+    var d=vals(x), tr=el("tr",cls), ph=d.pb-d.pt;
+    [d.n,fmt(d.r26),fmt(d.rb),fmt(d.rt),fmt(d.rb-d.rt),fmt(d.p26),fmt(d.pb),fmt(d.pt),fmt(ph*d.pds),fmt(ph*(1-d.pds))]
+      .forEach(function(c){ tr.appendChild(el("td",null,c)); });
+    /* Trough vs today, with a bar beneath the number growing left from the cell's right edge: red down, green up, capped at 100% */
+    var td=el("td","dbar"), txt, pv=null;
+    if(d.p26<=0) txt="不适用"; else if(d.pt<0){ txt="转亏"; pv=-100; } else { pv=Math.round((d.pt/d.p26-1)*100); txt=pct(d.pt,d.p26); }
+    if(pv!==null){
+      var w=Math.max(6,Math.min(Math.abs(pv),100)), bar=el("span","db "+(pv<0?"dn":"up"));
+      bar.style.width="max(10px, calc("+w+"% - 8px))"; td.appendChild(bar);
+    }
+    td.appendChild(el("span","v",txt)); tr.appendChild(td);
+    body.appendChild(tr);
+  }
+  LAYERS.forEach(function(L){ var a=agg(L.rows); a.n=L.name; line(a,"layer"); L.rows.forEach(function(d){ line(d); all.push(d); }); });
+  var t=agg(all); t.n="全部层级（收入跨层重复计算）"; line(t,"total");
+  tb.appendChild(body);
+}
+function render(){
+  var P=mode==="profit";
+  [["btn-profit",P],["btn-revenue",!P],["btn-full",scen==="full"],["btn-fin",scen==="fin"]].forEach(function(b){ document.getElementById(b[0]).setAttribute("aria-pressed",b[1]); });
+  var ch=document.getElementById("chain"); ch.textContent="";
+  CHAINS[scen].forEach(function(s,i){ if(i) ch.appendChild(el("i",null,"→")); ch.appendChild(el("span",null,s)); });
+  var lg=document.getElementById("legend"); lg.textContent="";
+  [["today","今日"+(P?"利润池":"收入")+"（2026年预估）"],["destroyed","谷底蒸发"],["delayed","谷底递延"]].forEach(function(p){
+    var s=el("span"), w=el("i","sw g-"+p[0]); s.appendChild(w); s.appendChild(document.createTextNode(p[1])); lg.appendChild(s);
+  });
+  tiles(); table();
+  var allRows=[]; LAYERS.forEach(function(L){ allRows=allRows.concat(L.rows); });
+  var keep=scen; [["fin","fk-fin"],["full","fk-full"]].forEach(function(f){
+    scen=f[0]; var a=agg(allRows);
+    document.getElementById(f[1]).textContent="谷底年度利润池 "+fmtT(a.pt)+"，较今日 "+pct(a.pt,a.p26);
+  }); scen=keep;
+  ["fin","full"].forEach(function(k){
+    document.getElementById("br-"+k).setAttribute("aria-pressed",scen===k);
+    document.getElementById("pk-"+k).textContent = scen===k ? "已选" : "选择";
+  });
+  var s6=STEP6[scen];
+  document.getElementById("s6-h").textContent=s6.h; document.getElementById("s6-p").textContent=s6.p; document.getElementById("s6-c").textContent=s6.c;
+  document.getElementById("loss-scen").textContent = scen==="full" ? "全面崩溃" : "融资主导";
+  var ul=document.getElementById("losses"); ul.textContent="";
+  lossItems().forEach(function(it){ var li=el("li"); li.appendChild(el("b",null,it[0])); li.appendChild(document.createTextNode(it[1])); ul.appendChild(li); });
+  var ov=document.getElementById("overview-rows"); ov.textContent="";
+  var layerRows=LAYERS.map(function(L){ var a=agg(L.rows); a.n=L.name; a.who=L.rows.length+" 个子行业"; return a; });
+  var sc=scaleFor(layerRows); ov.parentNode.classList.toggle("has-neg",sc.neg>0);
+  layerRows.forEach(function(a,i){ ov.appendChild(buildRow(a,sc,i)); });
+  var panels=document.getElementById("panels"); panels.textContent="";
+  LAYERS.forEach(function(L){
+    var a=agg(L.rows); a.n=L.name; var v=derive(a);
+    var card=el("section","card"); card.id="layer-"+L.id;
+    var head=el("div","card-head"); head.appendChild(el("h2",null,L.name));
+    head.appendChild(el("span","sum","今日 "+fmt(v.now)+"  ·  蒸发或递延 "+fmt(v.hit)+"  ·  谷底 "+fmt(v.tr)));
+    card.appendChild(head);
+    if(L.why) card.appendChild(el("p","why",L.why));
+    card.appendChild(el("div","scale-note","本面板的柱共用同一比例尺。下方柱的标签：合计（蒸发 + 递延）。"));
+    var rows=el("div","rows"), s=scaleFor(L.rows); if(s.neg>0) card.classList.add("has-neg");
+    L.rows.forEach(function(d,i){ rows.appendChild(buildRow(d,s,i)); });
+    card.appendChild(rows); panels.appendChild(card);
+  });
+  if(typeof cdsFirst!=="undefined" && !cdsFirst) armReveal();
+}
+
+/* Five-year CDS, basis points. Each point is a reading reported in the press: [date, level, note]. */
+var CDS = [
+ {id:"crwv", name:"CoreWeave", pts:[["2026-06-15",452,"6月读数，日期约数"],["2026-10-01",395,"报道为低于400"],["2026-10-08",895,"按报道的单周升16%推算"],["2026-10-14",1118],["2026-10-15",1038,"收盘价，盘中曾达1,140"],["2026-10-19",1082],["2026-10-21",1145],["2026-10-27",1041],["2026-11-20",1233,"盘中高位"]]},
+ {id:"sbg", name:"软银", pts:[["2026-03-05",355],["2026-03-09",380],["2026-03-27",376],["2026-06-15",280,"6月，约数"],["2026-08-05",360,"约数"],["2026-10-13",400],["2026-10-20",432],["2026-11-06",462],["2026-11-25",501,"2022年10月以来最阔"]]},
+ {id:"orcl", name:"甲骨文", pts:[["2026-01-02",144],["2026-03-27",198],["2026-07-29",215],["2026-09-15",182,"9月中"],["2026-09-26",230],["2026-10-08",260],["2026-10-15",288],["2026-10-19",315],["2026-11-20",328],["2026-11-24",356,"纪录高位"]]},
+ {id:"nvda", name:"英伟达", pts:[["2025-12-31",39],["2026-06-26",42,"6月下旬"],["2026-07-27",82,"盘中纪录"],["2026-08-19",81],["2026-10-19",101,"10月，日期约数"],["2026-10-27",127],["2026-11-12",144.5],["2026-11-20",145.5,"一年高位"],["2026-11-24",142.7]]}
+];
+var MON=["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+function T(s){ return Date.parse(s+"T00:00:00Z"); }
+function dlabel(s){ var d=new Date(T(s)); return d.getUTCFullYear()+"年"+(d.getUTCMonth()+1)+"月"+d.getUTCDate()+"日"; }
+function bp(v){ return Math.round(v).toLocaleString("en-US"); }
+var NS="http://www.w3.org/2000/svg";
+function sv(tag,attrs,txt){ var e=document.createElementNS(NS,tag); for(var k in attrs) e.setAttribute(k,attrs[k]); if(txt!=null) e.textContent=txt; return e; }
+var cdsFirst=true;
+function cdsChart(){
+  var box=document.getElementById("cds-chart"); box.textContent="";
+  box.classList.toggle("cds-anim", cdsFirst); cdsFirst=false;
+  var w=Math.max(300,box.clientWidth), narrow=w<560, h=narrow?300:360;
+  var m={l:42,r:narrow?126:128,t:14,b:26}, x0=T("2025-12-31"), x1=T("2026-11-25"), y0=Math.log(30), y1=Math.log(1500);
+  var X=function(t){ return m.l+(t-x0)/(x1-x0)*(w-m.l-m.r); }, Y=function(v){ return h-m.b-(Math.log(v)-y0)/(y1-y0)*(h-m.t-m.b); };
+  var svg=sv("svg",{viewBox:"0 0 "+w+" "+h,width:w,height:h});
+  [50,100,200,500,1000].forEach(function(v){
+    svg.appendChild(sv("line",{x1:m.l,x2:w-m.r,y1:Y(v),y2:Y(v),stroke:"var(--hair)","stroke-width":1}));
+    svg.appendChild(sv("text",{x:m.l-6,y:Y(v)+4,"text-anchor":"end"},bp(v)));
+  });
+  svg.appendChild(sv("text",{x:m.l+4,y:Y(1000)-5},narrow?"1,000：困境":"1,000：一般视为困境水平"));
+  svg.appendChild(sv("line",{x1:m.l,x2:w-m.r,y1:h-m.b,y2:h-m.b,stroke:"var(--base)","stroke-width":1}));
+  for(var i=0;i<11;i++){ if(narrow && i%3) continue; var t=Date.UTC(2026,i,1); svg.appendChild(sv("text",{x:X(t),y:h-8,"text-anchor":i?"middle":"start"},MON[i])); }
+  var all=[];
+  CDS.forEach(function(s){
+    var col="var(--c-"+s.id+")", dstr=s.pts.map(function(p,i){ return (i?"L":"M")+X(T(p[0])).toFixed(1)+" "+Y(p[1]).toFixed(1); }).join(" ");
+    svg.appendChild(sv("path",{d:dstr,fill:"none",stroke:col,"stroke-width":2,"stroke-linejoin":"round","stroke-linecap":"round",pathLength:1,"class":"draw"}));
+    s.pts.forEach(function(p){
+      var cx=X(T(p[0])), cy=Y(p[1]);
+      svg.appendChild(sv("circle",{cx:cx,cy:cy,r:4,fill:col,stroke:"var(--surface)","stroke-width":2,"class":"pt"}));
+      all.push({s:s,p:p,cx:cx,cy:cy});
+    });
+    var last=s.pts[s.pts.length-1], lx=w-m.r+10, ly=Y(last[1])+4;
+    svg.appendChild(sv("circle",{cx:lx,cy:ly-4,r:4,fill:col}));
+    svg.appendChild(sv("text",{x:lx+8,y:ly,"class":"end"},s.name+" "+bp(last[1])));
+  });
+  var halo=sv("circle",{r:7,fill:"none",stroke:"var(--ink)","stroke-width":1.5,visibility:"hidden"}); svg.appendChild(halo);
+  var hit=sv("rect",{x:0,y:0,width:w,height:h,fill:"transparent"}); svg.appendChild(hit);
+  hit.addEventListener("pointermove",function(e){
+    var r=svg.getBoundingClientRect(), k=w/r.width, px=(e.clientX-r.left)*k, py=(e.clientY-r.top)*k, best=null, bd=1e9;
+    all.forEach(function(a){ var dd=(a.cx-px)*(a.cx-px)+(a.cy-py)*(a.cy-py); if(dd<bd){ bd=dd; best=a; } });
+    if(!best) return;
+    halo.setAttribute("cx",best.cx); halo.setAttribute("cy",best.cy); halo.setAttribute("visibility","visible");
+    showTip(best.s.name,[[dlabel(best.p[0]),bp(best.p[1])+" 基点"]],best.p[2]||null,e.clientX,e.clientY);
+  });
+  hit.addEventListener("pointerleave",function(){ halo.setAttribute("visibility","hidden"); hideTip(); });
+  box.appendChild(svg);
+}
+function cdsStatic(){
+  var lg=document.getElementById("cds-legend"), rd=document.getElementById("cds-readings");
+  CDS.forEach(function(s){
+    var sp=el("span"), w=el("i","sw line"); w.style.background="var(--c-"+s.id+")"; sp.appendChild(w); sp.appendChild(document.createTextNode(s.name)); lg.appendChild(sp);
+    var col=el("div"), h=el("h3"), w2=el("i","sw line"); w2.style.background="var(--c-"+s.id+")"; h.appendChild(w2); h.appendChild(document.createTextNode(s.name)); col.appendChild(h);
+    var t=el("table"), b=el("tbody");
+    s.pts.forEach(function(p){ var tr=el("tr"); tr.appendChild(el("td",null,dlabel(p[0]))); tr.appendChild(el("td",null,bp(p[1]))); b.appendChild(tr); });
+    t.appendChild(b); col.appendChild(t); rd.appendChild(col);
+  });
+}
+
+/* Watch list. met = observed as of 25 Nov 2026. */
+var WATCH = {
+  fin:{name:"融资主导信号", rule:"勾选0至3项为平静，4至6项为压力累积，7项或以上为大概已经展开。",
+    th:function(n){ return n>=7?"crit":n>=4?"warn":"quiet"; },
+    items:[
+      {id:"f1", t:"美联储仍在加息，10年期美国国债收益率高于5%", n:"已达成：9月加息为2023年以来首次；10年期收益率高于5%。", met:true},
+      {id:"f2", t:"软银五年期 CDS 高于500基点", n:"已达成：11月25日为501基点，2022年10月以来最阔。", met:true},
+      {id:"f3", t:"CoreWeave 五年期 CDS 高于1,000基点", n:"已达成：11月20日为1,233基点。", met:true},
+      {id:"f4", t:"超大规模云厂商的违约互换创纪录", n:"已达成：Alphabet 及甲骨文于11月25日创纪录。", met:true},
+      {id:"f5", t:"OpenAI 上市或融资轮延后", n:"已达成：上市推迟至2027年。", met:true},
+      {id:"f6", t:"已承诺的 AI 建设延后，或租金延期支付", n:"已达成：甲骨文9月就 Project Jupiter 发出不可抗力通知。", met:true},
+      {id:"f7", t:"甲骨文被主要评级机构降至垃圾级", n:"未达成：评级为 BBB-，仅高于垃圾级一级。", met:false},
+      {id:"f8", t:"新云拖欠还款、违反契约或再融资失败", n:"未达成。", met:false},
+      {id:"f9", t:"软银出售核心资产，或延长2027年3月到期的过桥贷款", n:"未达成：400亿美元过桥贷款于2027年3月25日到期。", met:false},
+      {id:"f10", t:"OpenAI 未能完成融资轮，或削减算力承诺", n:"未达成。", met:false}
+    ]},
+  full:{name:"全面崩溃信号", rule:"勾选0至1项为平静，2至3项需密切留意，4项或以上、或两项关键指标均被勾选，即大概正在滑向全面崩溃。",
+    th:function(n,dec){ return (n>=4||dec>=2)?"crit":n>=2?"warn":"quiet"; },
+    items:[
+      {id:"b1", t:"GPU 租金下跌，尤其是一年期合约", n:"未达成：10月下旬较旧的 H100 租金仍在上升。", met:false, dec:true},
+      {id:"b2", t:"AI 实验室下调Token价格，但收入增长没有加快", n:"未达成：有报道指出现价格战，但实验室收入仍在复合增长。", met:false, dec:true},
+      {id:"b3", t:"私募信贷基金限制赎回，或以 GPU 作抵押的贷款跌至约80美分以下", n:"未达成。", met:false},
+      {id:"b4", t:"被收回的 GPU 算力以贱价出售或出租", n:"未达成。", met:false},
+      {id:"b5", t:"存储合约价格见顶回落", n:"未达成：存储厂商仍预期短缺延续至2028年以后。", met:false},
+      {id:"b6", t:"超大规模云厂商下调资本开支指引，或以“消化期”形容", n:"未达成。", met:false},
+      {id:"b7", t:"超大规模云厂商为 GPU 减记或缩短折旧年期", n:"未达成。", met:false},
+      {id:"b8", t:"失业率上升，企业软件公司下调指引", n:"未达成。", met:false}
+    ]}
+};
+var STLAB={quiet:"平静",warn:{fin:"压力累积",full:"密切留意"},crit:{fin:"大概已经展开",full:"大概正在滑落"}};
+function stLabel(k,st){ return st==="quiet"?"平静":STLAB[st][k]; }
+var WKEY="abpm-watch-v1", wstate={};
+function wDefaults(){ var o={}; ["fin","full"].forEach(function(k){ WATCH[k].items.forEach(function(it){ o[it.id]=it.met; }); }); return o; }
+function wLoad(){ wstate=wDefaults(); try{ var raw=localStorage.getItem(WKEY); if(raw){ var o=JSON.parse(raw); for(var k in o) if(k in wstate) wstate[k]=!!o[k]; } }catch(e){} }
+function wSave(){ try{ localStorage.setItem(WKEY,JSON.stringify(wstate)); }catch(e){} }
+function wCount(k){ var n=0,d=0; WATCH[k].items.forEach(function(it){ if(wstate[it.id]){ n++; if(it.dec) d++; } }); return {n:n,d:d,tot:WATCH[k].items.length,st:WATCH[k].th(n,d)}; }
+function wBuild(){
+  ["fin","full"].forEach(function(k){
+    var W=WATCH[k], box=document.getElementById("wl-"+k); box.textContent="";
+    var h=el("div","wl-head"); h.appendChild(el("h3",null,W.name)); var pl=el("span","pill"); pl.id="wl-pill-"+k; h.appendChild(pl); box.appendChild(h);
+    var m=el("div","meter"); m.id="wl-meter-"+k; W.items.forEach(function(){ m.appendChild(el("span")); }); box.appendChild(m);
+    box.appendChild(el("div","rule",W.rule));
+    var ul=el("ul","wl");
+    W.items.forEach(function(it){
+      var li=el("li"), lab=el("label"), cb=el("input"); cb.type="checkbox"; cb.id="wl-"+it.id; cb.checked=!!wstate[it.id];
+      cb.addEventListener("change",function(){ wstate[it.id]=cb.checked; wSave(); wUpdate(); });
+      lab.htmlFor=cb.id; lab.appendChild(cb);
+      var t=el("span","it",it.t); if(it.dec) t.appendChild(el("span","dec","关键指标")); lab.appendChild(t);
+      lab.appendChild(el("span","nt",it.n)); li.appendChild(lab); ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  });
+}
+function setPill(node,k,c){ node.textContent=""; var i=el("i",c.st); node.appendChild(i); node.appendChild(document.createTextNode((k==="fin"?"融资主导 ":"全面崩溃 ")+c.n+"/"+c.tot+"："+stLabel(k,c.st))); }
+var wPick="fin";
+function wUpdate(){
+  var cf=wCount("fin"), cb=wCount("full");
+  [["fin",cf],["full",cb]].forEach(function(x){
+    var k=x[0], c=x[1];
+    setPill(document.getElementById("wl-pill-"+k),k,c); setPill(document.getElementById("ws-"+k),k,c);
+    var spans=document.getElementById("wl-meter-"+k).children;
+    for(var i=0;i<spans.length;i++) spans[i].className = i<c.n ? "on "+c.st : "";
+    WATCH[k].items.forEach(function(it){ var cbx=document.getElementById("wl-"+it.id); if(cbx) cbx.checked=!!wstate[it.id]; });
+  });
+  var v=document.getElementById("verdict"), txt;
+  if(cb.st==="crit"){ wPick="full"; txt=["信号指向全面崩溃。","需求面信号已越过门槛，本页较深的路径才是相关情景。"]; }
+  else if(cb.st==="warn"){ wPick="full"; txt=["需求面信号开始出现。","留意两项关键指标：若租金及每个Token的收入转弱，融资冲击便会演变成全面崩溃。"]; }
+  else if(cf.st==="crit"){ wPick="fin"; txt=["融资主导路径看来已经展开。","信贷违约正在发生，但需求面信号仍然平静。"]; }
+  else if(cf.st==="warn"){ wPick="fin"; txt=["信贷压力正在累积；需求面信号平静。","这最接近融资主导路径，而且尚未有任何违约发生。"]; }
+  else { wPick="fin"; txt=["暂时未有明确信号。","两组信号都未越过第一道门槛。"]; }
+  v.textContent=""; v.appendChild(el("b",null,txt[0])); v.appendChild(document.createTextNode(txt[1]));
+  document.getElementById("wl-show").textContent="显示"+(wPick==="full"?"全面崩溃":"融资主导")+"情景数字";
+}
+wLoad(); wBuild(); wUpdate();
+function smooth(){ return matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"; }
+function foldClose(detId, cardId){ document.getElementById(detId).open=false; document.getElementById(cardId).scrollIntoView({behavior:smooth(), block:"start"}); }
+document.getElementById("wl-close").addEventListener("click",function(){ foldClose("watchd","watch"); });
+document.getElementById("story-close").addEventListener("click",function(){ foldClose("story","chain-of-events"); });
+Array.prototype.forEach.call(document.querySelectorAll('a[href="#watch"]'),function(a){ a.addEventListener("click",function(){ document.getElementById("watchd").open=true; }); });
+document.getElementById("wl-reset").addEventListener("click",function(){ wstate=wDefaults(); wSave(); wUpdate(); });
+document.getElementById("wl-clear").addEventListener("click",function(){ for(var k in wstate) wstate[k]=false; wSave(); wUpdate(); });
+document.getElementById("wl-show").addEventListener("click",function(){ scen=wPick; render(); document.getElementById("overview").scrollIntoView({behavior:smooth(), block:"start"}); });
+
+document.getElementById("btn-profit").addEventListener("click",function(){ mode="profit"; render(); });
+document.getElementById("btn-revenue").addEventListener("click",function(){ mode="revenue"; render(); });
+document.getElementById("btn-full").addEventListener("click",function(){ scen="full"; render(); });
+document.getElementById("btn-fin").addEventListener("click",function(){ scen="fin"; render(); });
+document.getElementById("br-fin").addEventListener("click",function(){ scen="fin"; render(); });
+document.getElementById("br-full").addEventListener("click",function(){ scen="full"; render(); });
+var rz; window.addEventListener("resize",function(){ clearTimeout(rz); rz=setTimeout(function(){ render(); cdsChart(); },150); });
+cdsStatic(); render(); cdsChart(); armReveal();
+</script>
+</body>
+</html>

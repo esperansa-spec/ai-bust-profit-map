@@ -43,6 +43,11 @@ h1{font-family:var(--font-display);font-weight:600;font-size:34px;line-height:1.
 h2{font-family:var(--font-display);font-weight:600;font-size:20px;margin:0;text-wrap:balance}
 h3{font-family:var(--font-display);font-weight:600;font-size:15px;margin:0 0 6px}
 p{margin:0}
+.lang{display:flex;justify-content:flex-end;gap:4px;margin-bottom:6px}
+.lang a{font-size:13px;font-weight:500;color:var(--ink-2);text-decoration:none;border:1px solid var(--hair);border-radius:4px;padding:2px 9px;background:var(--surface)}
+.lang a:hover{color:var(--ink);border-color:var(--base)}
+.lang a[aria-current="page"]{color:var(--surface);background:var(--ink);border-color:var(--ink)}
+.lang a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .lede{color:var(--ink-2);max-width:68ch;margin-top:8px}
 .chain{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:14px;font-size:13px}
 .chain span{background:var(--wash);border-radius:4px;padding:3px 9px}
@@ -233,6 +238,7 @@ a{color:var(--accent)}
 <body>
 <div class="wrap">
   <header>
+    <nav class="lang" aria-label="Language"><a href="index.html" lang="en" aria-current="page">EN</a><a href="tc/index.html" lang="zh-Hant">繁</a><a href="sc/index.html" lang="zh-Hans">简</a></nav>
     <h1>AI bust: profit destroyed and delayed across the chip stack</h1>
     <p class="lede">A bear-case map of the semiconductor profit pool. For each sub-sector it sets today's operating profit beside the profit that would be destroyed or delayed in the trough year, under two versions of the bust. All figures are estimates in US$ billions.</p>
     <div class="chain" id="chain" aria-label="Scenario sequence"></div>
