@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Bust Profit Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: summary tiles, one shared-scale chart by layer, one panel per layer with its own scale, then what credit is pricing, then the table twin. */
+:root{
+  color-scheme: light;
+  --page:#f4f6f9; --surface:#ffffff; --ink:#16191d; --ink-2:#5d6570; --hair:#e4e7ec; --base:#bfc5cd;
+  --wash:#eef1f5; --accent:#1757ac;
+  --s-today:#257de0; --s-destroyed:#f47230; --s-delayed:#00b894;
+  --c-crwv:#ee7fac; --c-sbg:#008a17; --c-orcl:#6a4ce2; --c-nvda:#ec4647;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-display:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --page:#0c0d0f; --surface:#191919; --ink:#efefef; --ink-2:#9c9fa5; --hair:#303236; --base:#474a50;
+    --wash:#232528; --accent:#84b9f3;
+    --s-today:#338ced; --s-destroyed:#e76624; --s-delayed:#00a888;
+    --c-crwv:#e24d8b; --c-sbg:#0aac23; --c-orcl:#9887ef; --c-nvda:#eb6263;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --page:#0c0d0f; --surface:#191919; --ink:#efefef; --ink-2:#9c9fa5; --hair:#303236; --base:#474a50;
+  --wash:#232528; --accent:#84b9f3;
+  --s-today:#338ced; --s-destroyed:#e76624; --s-delayed:#00a888;
+  --c-crwv:#e24d8b; --c-sbg:#0aac23; --c-orcl:#9887ef; --c-nvda:#eb6263;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 56px;display:flex;flex-direction:column;gap:20px}
+h1{font-family:var(--font-display);font-weight:600;font-size:34px;line-height:1.1;margin:0;text-wrap:balance;letter-spacing:-0.01em}
+h2{font-family:var(--font-display);font-weight:600;font-size:20px;margin:0;text-wrap:balance}
+h3{font-family:var(--font-display);font-weight:600;font-size:15px;margin:0 0 6px}
+p{margin:0}
+.lede{color:var(--ink-2);max-width:68ch;margin-top:8px}
+.chain{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:14px;font-size:13px}
+.chain span{background:var(--wash);border-radius:4px;padding:3px 9px}
+.chain i{font-style:normal;color:var(--ink-2);align-self:center}
+
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.tile{background:var(--surface);border:1px solid var(--hair);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.tile .lab{font-size:13px;color:var(--ink-2)}
+.tile .val{font-family:var(--font-display);font-weight:600;font-size:32px;line-height:1.15}
+.tile .note{font-size:13px;color:var(--ink-2)}
+.tile.key{border-top:3px solid var(--s-destroyed)}
+
+.bar-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;position:sticky;top:0;z-index:5;background:var(--page);padding:10px 0;border-bottom:1px solid var(--hair)}
+.ctl{display:flex;flex-direction:column;gap:3px}
+.ctl > span{font-size:12px;color:var(--ink-2)}
+.seg{display:inline-flex;border:1px solid var(--base);border-radius:6px;overflow:hidden}
+.seg button{font:inherit;font-size:14px;font-weight:500;color:var(--ink);background:var(--surface);border:0;padding:6px 14px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--base)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.seg button:focus-visible,.row:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--ink-2);margin-left:auto}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+.sw.line{height:3px;width:16px;border-radius:2px}
+
+.card{background:var(--surface);border:1px solid var(--hair);border-radius:8px;padding:18px 18px 12px}
+.card-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 16px;margin-bottom:10px}
+.card-head .sum{font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.scale-note{font-size:12px;color:var(--ink-2);margin-bottom:6px}
+.rows{display:flex;flex-direction:column}
+.row{display:grid;grid-template-columns:200px minmax(0,1fr) 150px;gap:4px 16px;align-items:center;padding:10px 6px;border-top:1px solid var(--hair);border-radius:4px;cursor:default}
+.row:hover,.row:focus-visible{background:var(--wash)}
+.name{font-weight:500;line-height:1.3}
+.name small{display:block;font-weight:400;font-size:12px;color:var(--ink-2)}
+.rough{display:inline-block;font-size:11px;font-weight:500;color:var(--ink-2);border:1px solid var(--base);border-radius:3px;padding:0 5px;margin-left:6px;vertical-align:1px}
+.plot{display:flex;flex-direction:column;gap:3px;min-width:0;border-left:1px solid var(--base)}
+.track{display:flex;align-items:center;height:16px;min-width:0}
+.bar{height:14px;flex:0 0 auto;min-width:2px}
+.bar.today{background:var(--s-today)}
+.bar.destroyed{background:var(--s-destroyed)}
+.bar.delayed{background:var(--s-delayed)}
+.bar.end{border-radius:0 4px 4px 0}
+.bar.neg{border-radius:4px 0 0 4px}
+.gap{flex:0 0 2px}
+.zero{flex:0 0 1px;align-self:stretch;background:var(--base)}
+.tip-lab{font-size:12px;color:var(--ink);margin-left:6px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tip-lab em{font-style:normal;color:var(--ink-2)}
+.after{font-size:13px;font-variant-numeric:tabular-nums;line-height:1.3}
+.after b{font-weight:600}
+.after small{display:block;font-size:12px;color:var(--ink-2)}
+.has-neg .plot{border-left:0}
+
+#tip{position:fixed;z-index:20;max-width:300px;background:var(--surface);color:var(--ink);border:1px solid var(--base);border-radius:6px;padding:10px 12px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.16);pointer-events:none;display:none}
+#tip h4{margin:0 0 6px;font-size:14px;font-weight:600}
+#tip dl{display:grid;grid-template-columns:auto auto;gap:2px 14px;margin:0;font-variant-numeric:tabular-nums}
+#tip dt{color:var(--ink-2)}
+#tip dd{margin:0;text-align:right}
+#tip p{margin-top:6px;color:var(--ink-2)}
+
+.credit-lede{color:var(--ink-2);max-width:72ch;margin-bottom:10px;font-size:14px}
+#cds-chart{width:100%}
+#cds-chart svg{display:block;width:100%;height:auto;overflow:visible}
+#cds-chart text{font-family:var(--font-body);font-size:12px;fill:var(--ink-2);font-variant-numeric:tabular-nums}
+#cds-chart text.end{fill:var(--ink);font-weight:500}
+.readings{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 24px;margin-top:14px;font-size:13px}
+.readings h3{display:flex;align-items:center;gap:6px}
+.readings table{min-width:0;font-size:13px}
+.readings td{padding:3px 6px 3px 0;border-bottom:1px solid var(--hair)}
+.readings td:first-child{color:var(--ink-2);white-space:nowrap}
+
+#story > summary{list-style:none;cursor:pointer;margin-bottom:0;border-radius:6px}
+#story > summary::-webkit-details-marker{display:none}
+#story > summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+#story[open] > summary{margin-bottom:10px}
+.story-title{display:flex;flex-direction:column;gap:2px}
+.story-teaser{font-size:14px;color:var(--ink-2)}
+#story[open] .story-teaser{display:none}
+.tog{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--accent);white-space:nowrap}
+.tog::after{content:"";width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-2px);transition:transform .15s}
+#story[open] .tog::after{transform:rotate(-135deg) translateY(-1px)}
+#story[open] .tog-open, #story:not([open]) .tog-close{display:none}
+@media (prefers-reduced-motion: reduce){ .tog::after{transition:none} }
+.story-lede{color:var(--ink-2);max-width:72ch;font-size:14px;margin-bottom:6px}
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.step{display:grid;grid-template-columns:34px minmax(0,1fr) minmax(0,250px);gap:6px 18px;padding:14px 0;border-top:1px solid var(--hair)}
+.step .num{font-family:var(--font-display);font-weight:600;font-size:22px;line-height:1.1;color:var(--accent)}
+.step h3{margin:0 0 3px;font-size:16px}
+.step p{color:var(--ink-2);font-size:14px;max-width:64ch}
+.chips{font-size:13px;background:var(--wash);border-radius:6px;padding:8px 11px;align-self:start;line-height:1.4}
+.chips b{display:block;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);font-weight:600;margin-bottom:3px}
+.fork{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:10px}
+.branch{display:block;width:100%;text-align:left;font:inherit;line-height:1.5;background:var(--surface);border:1px solid var(--base);border-radius:6px;padding:10px 12px 10px 14px;font-size:14px;color:var(--ink-2);cursor:pointer}
+.branch:hover{background:var(--wash)}
+.branch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.branch[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 4px 0 0 var(--accent);background:var(--wash)}
+.branch .bt{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline;margin:0 0 4px;font-size:14px;font-weight:600;color:var(--ink)}
+.branch .bt small{font-weight:500;font-size:12px;color:var(--ink-2)}
+.branch .pick{margin-left:auto;font-size:12px;font-weight:500;color:var(--accent)}
+.branch .res{display:block;margin-top:6px;color:var(--ink);font-variant-numeric:tabular-nums}
+.fork-hint{font-size:13px;color:var(--ink-2);margin-top:8px}
+.takeaways h3 small{font-family:var(--font-body);font-weight:500;font-size:12px;color:var(--ink-2);margin-left:6px}
+.takeaways{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px 28px;margin-top:6px;padding-top:14px;border-top:1px solid var(--hair);font-size:14px}
+.takeaways ul,.takeaways ol{margin:0;padding-left:18px;color:var(--ink-2)}
+.takeaways li{margin-bottom:4px}
+.why{font-size:14px;color:var(--ink-2);margin:-2px 0 10px;max-width:74ch}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums;min-width:860px}
+th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--hair);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+thead th{font-weight:600;color:var(--ink-2);vertical-align:bottom;border-bottom:1px solid var(--base)}
+thead .grp th{text-align:center;border-bottom:0;padding-bottom:0}
+tr.layer td{font-weight:600;background:var(--wash)}
+tr.total td{font-weight:600;border-top:1px solid var(--base)}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px 28px;font-size:14px}
+.notes ul{margin:0;padding-left:18px;color:var(--ink-2)}
+.notes li{margin-bottom:4px}
+a{color:var(--accent)}
+@media (max-width:720px){
+  h1{font-size:27px}
+  .row{grid-template-columns:minmax(0,1fr)}
+  .after small{display:inline;margin-left:6px}
+  .bar-row{position:static}
+  .legend{margin-left:0}
+  .step{grid-template-columns:26px minmax(0,1fr)}
+  .step .chips{grid-column:2}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>AI bust: profit destroyed and delayed across the chip stack</h1>
+    <p class="lede">A bear-case map of the semiconductor profit pool. For each sub-sector it sets today's operating profit beside the profit that would be destroyed or delayed in the trough year, under two versions of the bust. All figures are estimates in US$ billions.</p>
+    <div class="chain" id="chain" aria-label="Scenario sequence"></div>
+  </header>
+
+  <section class="tiles" id="tiles" aria-label="Profit pool summary"></section>
+
+  <section class="card" id="chain-of-events">
+   <details id="story">
+    <summary class="card-head">
+      <span class="story-title"><h2>How the chain unfolds</h2><span class="story-teaser">Six steps from tighter credit to a cleared chain, with the fork between the two scenarios.</span></span>
+      <span class="tog"><span class="tog-open">Show the logic</span><span class="tog-close">Hide</span></span>
+    </summary>
+    <p class="story-lede">The bust starts in credit, not in usage. The small, levered buyers fail first, the financing chain around OpenAI breaks next, and the size of the damage then depends on one question: whether the capacity already installed becomes excess.</p>
+    <ol class="steps">
+      <li class="step"><span class="num">1</span><div><h3>Money gets dearer</h3><p>The Fed hiked in September for the first time since 2023, the 10-year Treasury yield is above 5%, and markets price more hikes into 2027. There is no rate-cut cushion of the kind that stopped the 2001 and 2008 financing shocks from becoming demand shocks.</p></div><div class="chips"><b>Effect on chips</b>None yet. Orders still reflect last year's plans.</div></li>
+      <li class="step"><span class="num">2</span><div><h3>The marginal buyers lose funding</h3><p>AI startups spending venture money on compute, roughly $65–105B a year by our estimate, cut back. Model-training startups with no revenue stop almost entirely; app-layer startups lose only the part their losses were funding. Directly, this is only 5–15% of the loss on this page, but these startups are the neoclouds' customers.</p></div><div class="chips"><b>Effect on chips</b>Neocloud utilisation and renewal prices weaken.</div></li>
+      <li class="step"><span class="num">3</span><div><h3>Neoclouds can't refinance</h3><p>Neoclouds borrow for about five years against customer contracts averaging about three, so lenders are underwriting renewals. Once default swap spreads pass 1,000 basis points, the market treats the credit as distressed and refinancing shuts.</p></div><div class="chips"><b>Effect on chips</b>The fastest-growing slice of Nvidia's customers stops ordering.</div></li>
+      <li class="step"><span class="num">4</span><div><h3>The financing chain breaks</h3><p>OpenAI relies on capital raised against future revenue. SoftBank funded its stake with bridge and margin loans. Oracle signed $288B of data-centre leases, largely for OpenAI's sites. When one link fails the others follow. Oracle survives by walking away from new builds, which passes the loss to developers and their lenders.</p></div><div class="chips"><b>Effect on chips</b>OpenAI's programmes with Broadcom, AMD and Nvidia are lost, along with the capacity contracted for it.</div></li>
+      <li class="step"><span class="num">5</span><div><h3>The fork: is installed capacity scarce or in excess?</h3><p>This decides whether the shock stays in finance or reaches demand. The trigger matters less than whether the chips already running become surplus. Telecom in 2001 was financing-led too, but fibre had been overbuilt many times over.</p>
+        <p class="fork-hint">Choose a path. It sets step 6, the takeaways and every chart below, the same as the scenario switch.</p>
+        <div class="fork" role="group" aria-label="Scenario">
+          <button type="button" class="branch" id="br-fin" data-scen="fin" aria-pressed="false"><span class="bt">Financing-led <small>what credit is pricing today</small><span class="pick" id="pk-fin"></span></span>Usage keeps growing. Cash-rich buyers take the foreclosed sites, rental prices hold, and hyperscalers keep capex flat. The loss is mostly forgone growth.<span class="res" id="fk-fin"></span></button>
+          <button type="button" class="branch" id="br-full" data-scen="full" aria-pressed="false"><span class="bt">Full bust <small>if forced sellers dump capacity</small><span class="pick" id="pk-full"></span></span>Lenders and funds facing withdrawals rent capacity at any price above power. Token prices fall faster than usage grows, lab revenue falls, and hyperscalers cut.<span class="res" id="fk-full"></span></button>
+        </div></div><div class="chips"><b>Effect on chips</b>Sets the size of everything below.</div></li>
+      <li class="step" id="step6"><span class="num">6</span><div><h3 id="s6-h"></h3><p id="s6-p"></p></div><div class="chips"><b>Effect on chips</b><span id="s6-c"></span></div></li>
+    </ol>
+    <div class="takeaways">
+      <div>
+        <h3>Where the losses come from<small id="loss-scen"></small></h3>
+        <ul id="losses"></ul>
+      </div>
+      <div>
+        <h3>What would tip financing-led into full bust</h3>
+        <ol>
+          <li>GPU rental prices falling, especially one-year contracts.</li>
+          <li>Labs cutting token prices without faster revenue growth.</li>
+          <li>Private-credit funds limiting withdrawals, or GPU-backed loans trading below about 80 cents.</li>
+          <li>Memory contract prices rolling over.</li>
+          <li>Hyperscalers describing capex as digestion, or writing down GPUs.</li>
+          <li>Unemployment rising and enterprise software guidance cut.</li>
+        </ol>
+        <p style="color:var(--ink-2);margin-top:6px">The first two decide it. While rental prices and revenue per token hold, a financing shock stays a financing shock.</p>
+      </div>
+    </div>
+   </details>
+  </section>
+
+  <div class="bar-row">
+    <div class="ctl"><span>Scenario</span>
+      <div class="seg" role="group" aria-label="Scenario">
+        <button type="button" id="btn-full" aria-pressed="true">Full bust</button>
+        <button type="button" id="btn-fin" aria-pressed="false">Financing-led</button>
+      </div>
+    </div>
+    <div class="ctl"><span>Measure</span>
+      <div class="seg" role="group" aria-label="Measure">
+        <button type="button" id="btn-profit" aria-pressed="true">Operating profit</button>
+        <button type="button" id="btn-revenue" aria-pressed="false">Revenue</button>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <section class="card" id="overview">
+    <div class="card-head"><h2>By layer</h2><span class="sum">One scale across all six layers</span></div>
+    <div class="rows" id="overview-rows"></div>
+  </section>
+
+  <div id="panels" style="display:flex;flex-direction:column;gap:20px"></div>
+
+  <section class="card" id="credit">
+    <div class="card-head"><h2>What credit is pricing</h2><span class="sum">Five-year default swap spreads, basis points, log scale</span></div>
+    <p class="credit-lede">Spreads on the levered names have widened while compute rental prices and lab revenue kept rising. That pattern fits the financing-led version. Lines join reported readings, so they are not daily closes.</p>
+    <div class="legend" id="cds-legend" style="margin:0 0 6px"></div>
+    <div id="cds-chart" role="img" aria-label="Line chart of five-year credit default swap spreads for CoreWeave, SoftBank, Oracle and Nvidia from December 2025 to November 2026"></div>
+    <div class="readings" id="cds-readings"></div>
+  </section>
+
+  <section class="card" id="table-view">
+    <div class="card-head"><h2>Table view</h2><span class="sum" id="table-sum">US$ billions a year</span></div>
+    <div class="tablewrap"><table id="tbl"></table></div>
+  </section>
+
+  <section class="card" id="method">
+    <div class="card-head"><h2>How to read this</h2></div>
+    <div class="notes">
+      <div>
+        <h3>The two scenarios</h3>
+        <ul>
+          <li><b>Full bust:</b> the levered buyers fail and usage disappoints too. Foreclosed capacity floods the rental market, and hyperscalers cut.</li>
+          <li><b>Financing-led:</b> credit shuts for the levered buyers while usage keeps growing. New builds stop, installed capacity stays scarce, and cash-rich buyers take the sites.</li>
+          <li>In both, OpenAI's forward orders are lost. The pressure points fall in the first half of 2027: SoftBank's bridge loan, OpenAI's delayed listing and Oracle's funding plan.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>What each bar means</h3>
+        <ul>
+          <li><b>Today</b> is the 2026 estimate, built from reported results for the first three quarters.</li>
+          <li><b>Destroyed or delayed</b> is the 2028 base case minus the trough year. The base is higher than today, so the loss can exceed today's pool.</li>
+          <li><b>Destroyed</b> is price, margin and orders that do not return. <b>Delayed</b> is spending pushed into 2030 to 2032.</li>
+          <li>Profit pools add up across layers. Revenue does not.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Limits and anchors</h3>
+        <ul>
+          <li>The 2028 base rolls forward vendor guidance, which already sums to more than buyers' announced capex can absorb.</li>
+          <li>Rows marked <span class="rough">rough</span> have no reported anchor. Intel Foundry revenue is mostly internal.</li>
+          <li>Today's figures: <a href="https://news.samsung.com/global/samsung-electronics-announces-third-quarter-2026-results">Samsung</a>, <a href="https://www.storagenewsletter.com/?p=306409">SK hynix</a>, Micron, Nvidia, <a href="https://www.fierce-network.com/broadband/broadcom-predicts-ai-chip-revenue-double-2027">Broadcom</a>, <a href="https://www.spglobal.com/market-intelligence/en/news-insights/research/2026/10/data-center-strength-powers-amd-s-revenue-in-q3">AMD</a>, <a href="https://www.intc.com/news-events/press-releases/detail/1786/intel-reports-third-quarter-2026-financial-results">Intel</a> and <a href="https://www.trendforce.com/news/2026/10/16/news-after-tsmcs-3q26-earnings-key-brokerage-takeaways-as-2028-capex-forecasts-reach-us105b/">TSMC</a> third-quarter results; <a href="https://www.trendforce.com/presscenter/news/20260529-13068.html">TrendForce</a>, <a href="https://www.wsts.org/esraCMS/extension/media/f/WST/7618/WSTS_FC-Release-2026-May.pdf">WSTS</a> and SEMI forecasts.</li>
+          <li>Chain of events: <a href="https://international.schwab.com/es/node/14401">Schwab</a> on the September hike and 5% yields; Oracle's 10-Q lease note via <a href="https://levelup.gitconnected.com/oracle-signed-288b-of-leases-then-came-the-jupiter-notice-5767a9aba5e4">this summary</a>; CoreWeave's August loan terms via <a href="https://theenergymag.com/news/2026-08-11/coreweave-ai-2-6-billion-wider-spread/">The Energy Mag</a>. The startup pool is our estimate from Crunchbase, Dealroom and reported run rates.</li>
+          <li>Spreads: press reports of ICE, Markit, LSEG and S&amp;P Global data, including <a href="https://www.investing.com/news/stock-market-news/ai-credit-default-swap-spreads-widen-on-unease-over-cash-flow-5049729">Reuters</a>, <a href="https://www.cnbc.com/2026/10/15/coreweave-credit-default-swaps-hit-distress-levels-as-investors-sour-on-ai-debt.html">CNBC</a> and <a href="https://www.bloomberg.com/news/articles/2026-03-27/oracle-s-credit-risk-measure-nears-record-high-on-ai-debt-fears">Bloomberg</a>. Vendors differ by a few points.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+<div id="tip" role="status"></div>
+
+<script>
+/* r = revenue, p = operating profit; 26 = 2026 estimate, b = 2028 base.
+   full / fin = trough year under each scenario: rt, pt = trough revenue and profit;
+   pds, rds = share of the profit / revenue loss that is destroyed rather than delayed. */
+var LAYERS = [
+ {id:"memory", why:"Hit through price. Margins are at a commodity peak, and HBM wafers return as ordinary supply when accelerator orders fall.", name:"Memory", rows:[
+  {n:"DRAM, excluding HBM", who:"Samsung, SK hynix, Micron", r26:520, rb:720, p26:375, pb:520,
+   full:{rt:300, pt:60, pds:.90, rds:.85, how:"HBM wafers return as commodity supply. Margin falls from about 72% to 20%."},
+   fin:{rt:480, pt:240, pds:.85, rds:.80, how:"A 15 to 25% cut to server demand flips a small shortage into surplus. Margin falls to about 50%."}},
+  {n:"HBM", who:"SK hynix, Samsung, Micron", r26:100, rb:180, p26:60, pb:108, rough:true,
+   full:{rt:95, pt:33, pds:.60, rds:.50, how:"Volume tracks accelerator units. Contracts are renegotiated, as in 2019 and 2023."},
+   fin:{rt:140, pt:70, pds:.40, rds:.35, how:"Volume follows the cut in accelerator orders. Pricing mostly holds."}},
+  {n:"NAND and SSD", who:"Samsung, Kioxia, SanDisk, SK hynix", r26:271, rb:400, p26:163, pb:232,
+   full:{rt:180, pt:18, pds:.89, rds:.85, how:"Enterprise SSD demand falls as new capacity lands. Margin falls from about 58% to 10%."},
+   fin:{rt:280, pt:98, pds:.80, rds:.75, how:"New capacity lands into slower server builds. Margin falls to about 35%."}}
+ ]},
+ {id:"compute", why:"Hit through lost programmes and buyer power. OpenAI's custom and AMD programmes go; Nvidia keeps volume with hyperscalers but gives up margin.", name:"Compute", rows:[
+  {n:"Merchant GPUs", who:"Nvidia", r26:423, rb:900, p26:270, pb:575,
+   full:{rt:495, pt:248, pds:.50, rds:.50, how:"Units down about 40% against base. Buyer power cuts margin from about 64% to 50%."},
+   fin:{rt:680, pt:394, pds:.35, rds:.35, how:"Neocloud and lab orders go. Hyperscalers and SpaceX take the freed allocation."}},
+  {n:"AMD AI GPUs", who:"AMD", r26:14, rb:50, p26:3.5, pb:16,
+   full:{rt:17.5, pt:2, pds:.70, rds:.70, how:"Loses its lead customer and most of its neocloud base."},
+   fin:{rt:28, pt:5.6, pds:.70, rds:.70, how:"The OpenAI programme is lost in both scenarios."}},
+  {n:"Custom AI chips", who:"Broadcom, Marvell, MediaTek", r26:72, rb:270, p26:40, pb:148,
+   full:{rt:165, pt:79, pds:.58, rds:.57, how:"OpenAI programme is lost. Hyperscaler in-house chips hold up better."},
+   fin:{rt:200, pt:104, pds:.70, rds:.70, how:"OpenAI programme is lost. Google, Meta and Anthropic volumes continue."}},
+  {n:"Server CPUs", who:"Intel, AMD", r26:42, rb:75, p26:10.5, pb:22.5,
+   full:{rt:54, pt:12, pds:.30, rds:.25, how:"AI-driven server demand slows. PC recovery on cheaper memory is not counted here."},
+   fin:{rt:66, pt:17.8, pds:.20, rds:.20, how:"Usage keeps growing, so general server demand mostly holds."}}
+ ]},
+ {id:"networking", why:"Hit hardest against plan. Orders assumed both more GPUs and more optics per GPU; both fall, and double orders placed to secure lasers unwind.", name:"Networking", rows:[
+  {n:"Optical transceivers", who:"Innolight, Eoptolink, Coherent, Lumentum", r26:36, rb:85, p26:10, pb:24,
+   full:{rt:36, pt:4.3, pds:.30, rds:.20, how:"Shortest lead times and the most double-ordering, then a destock."},
+   fin:{rt:56, pt:11.2, pds:.20, rds:.15, how:"Double orders unwind even with usage intact."}},
+  {n:"Connectivity silicon", who:"Marvell, Credo, Astera", r26:14, rb:32, p26:5, pb:12, rough:true,
+   full:{rt:16, pt:4, pds:.25, rds:.20, how:"Retimers, signal processors and cables follow rack shipments."},
+   fin:{rt:23, pt:7.4, pds:.20, rds:.15, how:"Follows rack shipments down by about a quarter."}}
+ ]},
+ {id:"foundry", why:"Cushioned by backlog and phones. TSMC's AI wafers fall; second-source programmes at Samsung and Intel slip a year or more.", name:"Foundry", rows:[
+  {n:"TSMC", who:"Leading-edge wafers and packaging", r26:176, rb:280, p26:100, pb:157,
+   full:{rt:222, pt:107, pds:.25, rds:.20, how:"AI wafers and packaging down about 40%. Phones and PCs add back a little."},
+   fin:{rt:252, pt:134, pds:.15, rds:.15, how:"AI wafers down about 20%. Allocation premiums fade."}},
+  {n:"Samsung foundry", who:"2nm and HBM base die", r26:20, rb:30, p26:0.5, pb:4, rough:true,
+   full:{rt:20, pt:-1, pds:.20, rds:.20, how:"Hyperscaler second-source programmes slip. Tesla and SpaceX chips are the cushion."},
+   fin:{rt:25, pt:1.5, pds:.20, rds:.20, how:"Second-source programmes slip by a year."}},
+  {n:"Intel Foundry", who:"Mostly internal wafers", r26:24, rb:32, p26:-8, pb:-3,
+   full:{rt:26, pt:-9, pds:0, rds:0, how:"Outside customers defer, so the path to break-even moves out."},
+   fin:{rt:29, pt:-6, pds:0, rds:0, how:"Outside customers defer. Internal volume holds."}}
+ ]},
+ {id:"equipment", why:"Lagged. Memory tools fall first as memory makers cut capex; lithography falls last because of backlog.", name:"Equipment", rows:[
+  {n:"Wafer equipment, memory", who:"Lam, Applied, TEL, ASML", r26:60, rb:85, p26:20, pb:29,
+   full:{rt:42, pt:10, pds:.25, rds:.25, how:"Memory capex halves within two quarters."},
+   fin:{rt:62, pt:18, pds:.20, rds:.20, how:"Memory makers trim expansion once prices turn."}},
+  {n:"Wafer equipment, foundry and logic", who:"ASML, Applied, KLA, TEL, Lam", r26:84, rb:115, p26:29, pb:40,
+   full:{rt:86, pt:21, pds:.20, rds:.20, how:"TSMC cuts capex by about 40%. Lithography lags because of backlog."},
+   fin:{rt:100, pt:31, pds:.15, rds:.15, how:"TSMC trims capex. Backlog cushions the first year."}},
+  {n:"Back-end equipment", who:"Advantest, Teradyne, Disco, Besi", r26:25, rb:29, p26:7, pb:8,
+   full:{rt:14.5, pt:1.7, pds:.20, rds:.15, how:"Test and assembly orders fall first and fastest."},
+   fin:{rt:21, pt:4.2, pds:.15, rds:.15, how:"Packaging expansion pauses."}}
+ ]},
+ {id:"materials", why:"Volume-linked. A short destock, then first to recover.", name:"Materials", rows:[
+  {n:"Substrates and boards", who:"Ibiden, Unimicron, Kinsus", r26:22, rb:32, p26:4, pb:6, rough:true,
+   full:{rt:21, pt:2, pds:.25, rds:.20, how:"Capacity committed for 2027 arrives into the downturn."},
+   fin:{rt:26, pt:3.8, pds:.20, rds:.20, how:"New capacity arrives into slower volume."}},
+  {n:"Process materials", who:"Resist, plating, slurry, wafers", r26:14, rb:18, p26:2.8, pb:3.6, rough:true,
+   full:{rt:14, pt:2.2, pds:.10, rds:.10, how:"Volume-linked. A two-to-three-quarter destock, then first to recover."},
+   fin:{rt:16, pt:3, pds:.10, rds:.10, how:"A short destock."}}
+ ]}
+];
+var CHAINS = {
+  full:["Neoclouds fold","OpenAI and SoftBank fail","Oracle stops new builds","Usage disappoints and hyperscalers cut"],
+  fin:["Credit shuts for levered buyers","Neoclouds, OpenAI and SoftBank fail","Oracle stops new builds","Usage keeps growing and hyperscalers hold capex flat"]
+};
+
+var STEP6 = {
+  full:{h:"The chain clears hard",
+    p:"Foreclosed capacity floods the rental market, so even hyperscalers cut. Memory reprices within a quarter and margins fall toward 20%. Optics and back-end equipment destock double orders. Nvidia and Broadcom cut prices rather than build inventory. TSMC and lithography fall last, cushioned by backlog. Falling chip prices then cut the cost per gigawatt, which brings cash-funded buyers back within one to two years.",
+    c:"A deep but short clearing: GPUs wear out in four to five years, fibre lasted decades."},
+  fin:{h:"Growth resets, prices mostly hold",
+    p:"Orders move from levered buyers to cash-funded ones: hyperscalers and SpaceX take the freed GPU allocation, and the installed base stays full. Memory tips from a small shortage into surplus, so margins roughly halve instead of collapsing. Optics and back-end equipment still destock double orders. TSMC trims capex while backlog cushions the first year. Because capacity stays scarce, buying resumes as soon as credit reopens.",
+    c:"A growth miss, not a collapse. Most layers end the trough year near today's profit."}
+};
+function layerShares(){
+  var tot=0, out={}; LAYERS.forEach(function(L){ var a=agg(L.rows), h=a.pb-a.pt; out[L.id]=h; tot+=h; });
+  for(var k in out) out[k]=Math.round(out[k]/tot*100); return out;
+}
+function lossItems(){
+  var sh=layerShares();
+  var tail = sh.foundry+sh.equipment+sh.materials;
+  if(scen==="full") return [
+    ["Memory pricing", " is "+sh.memory+"% of the profit lost. Margins fall from a commodity peak toward 20%, so the loss is price, not volume."],
+    ["Compute", " is "+sh.compute+"%: OpenAI's programmes go, and buyer power cuts Nvidia's margin from about 64% to 50%."],
+    ["Foundry, equipment and materials", " are "+tail+"% together, cushioned by backlog and phones but still below today at the trough."],
+    ["Optics", " is small in dollars but falls furthest against plan: orders assumed more GPUs and more optics per GPU, and the cancelled training clusters are the most optics-heavy."],
+    ["Startup spending", " is small in dollars but is the trigger, and a larger share of expected growth than of today's level."]];
+  return [
+    ["Memory", " is still "+sh.memory+"% of the profit lost. A 15 to 25% cut to server demand flips a small shortage into surplus; margins halve rather than collapse."],
+    ["Compute", " is "+sh.compute+"%, mostly OpenAI's lost programmes. Nvidia's volume moves to hyperscalers and SpaceX, and its margin mostly holds."],
+    ["Foundry, equipment and materials", " are "+tail+"% together, and mostly lose growth: their trough profits end near or above today's."],
+    ["Optics", " still falls furthest against plan, because double orders unwind even with usage intact."],
+    ["Startup spending", " is small in dollars but is the trigger, and a larger share of expected growth than of today's level."]];
+}
+var mode="profit", scen="full";
+function vals(d){
+  if(d._agg) return d;
+  var s=d[scen]; return {n:d.n,who:d.who,rough:d.rough,r26:d.r26,rb:d.rb,rt:s.rt,p26:d.p26,pb:d.pb,pt:s.pt,pds:s.pds,rds:s.rds,how:s.how};
+}
+function derive(x){
+  var d=vals(x), P=mode==="profit", now=P?d.p26:d.r26, base=P?d.pb:d.rb, tr=P?d.pt:d.rt, ds=P?d.pds:d.rds, hit=base-tr;
+  return {d:d, now:now, base:base, tr:tr, hit:hit, destroyed:hit*ds, delayed:hit*(1-ds)};
+}
+function agg(rows){
+  var o={_agg:true,n:"",r26:0,rb:0,rt:0,p26:0,pb:0,pt:0,pD:0,rD:0};
+  rows.forEach(function(x){ var d=vals(x); o.r26+=d.r26;o.rb+=d.rb;o.rt+=d.rt;o.p26+=d.p26;o.pb+=d.pb;o.pt+=d.pt;o.pD+=(d.pb-d.pt)*d.pds;o.rD+=(d.rb-d.rt)*d.rds; });
+  o.pds=o.pD/(o.pb-o.pt); o.rds=o.rD/(o.rb-o.rt); return o;
+}
+function fmt(v){
+  var a=Math.abs(v), s = a>=10 ? String(Math.round(a)) : (Math.round(a*10)/10).toFixed(1).replace(/\.0$/,"");
+  return (v<0 && s!=="0" ? "−" : "") + s;
+}
+function fmtT(v){ return "$"+(v/1000).toFixed(2)+"T"; }
+function pct(a,b){ var p=Math.round((a/b-1)*100); return (p>0?"+":p<0?"−":"")+Math.abs(p)+"%"; }
+function el(tag,cls,txt){ var e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; }
+
+function buildRow(x, sc){
+  var v=derive(x), d=v.d, row=el("div","row"); row.tabIndex=0;
+  var name=el("div","name"); name.appendChild(document.createTextNode(d.n));
+  if(d.rough) name.appendChild(el("span","rough","rough"));
+  if(d.who) name.appendChild(el("small",null,d.who));
+  row.appendChild(name);
+  var plot=el("div","plot");
+  function track(){ var t=el("div","track"); plot.appendChild(t); return t; }
+  function spacer(t,p){ var s=el("div"); s.style.flex="0 0 "+p+"%"; t.appendChild(s); }
+  var F=window.innerWidth<720?62:78, W=function(q){ return Math.abs(q)/sc.span*F; }, z=sc.neg/sc.span*F;
+  var t1=track();
+  if(v.now<0){ spacer(t1, z-W(v.now)); var b=el("div","bar today neg"); b.style.width=W(v.now)+"%"; t1.appendChild(b); if(sc.neg) t1.appendChild(el("div","zero")); }
+  else { if(sc.neg){ spacer(t1,z); t1.appendChild(el("div","zero")); } var b1=el("div","bar today end"); b1.style.width=W(v.now)+"%"; t1.appendChild(b1); }
+  t1.appendChild(el("span","tip-lab",fmt(v.now)));
+  var t2=track();
+  if(sc.neg){ spacer(t2,z); t2.appendChild(el("div","zero")); }
+  var hasDel=v.delayed>0.05, hasDes=v.destroyed>0.05;
+  if(hasDes){ var b2=el("div","bar destroyed"+(hasDel?"":" end")); b2.style.width=W(v.destroyed)+"%"; t2.appendChild(b2); }
+  if(hasDes&&hasDel) t2.appendChild(el("div","gap"));
+  if(hasDel){ var b3=el("div","bar delayed end"); b3.style.width=W(v.delayed)+"%"; t2.appendChild(b3); }
+  var lab=el("span","tip-lab",fmt(v.hit)+" "); lab.appendChild(el("em",null,"("+fmt(v.destroyed)+" + "+fmt(v.delayed)+")")); t2.appendChild(lab);
+  row.appendChild(plot);
+  var after=el("div","after"); after.appendChild(el("b",null,"Trough "+fmt(v.tr)));
+  after.appendChild(el("small",null, v.now<=0 ? "from "+fmt(v.now)+" today" : v.tr<0 ? "turns to a loss" : pct(v.tr,v.now)+" vs today"));
+  row.appendChild(after);
+  function tipAt(px,py){
+    var what = mode==="profit" ? "Operating profit" : "Revenue";
+    var pairs=[[what+" today (2026E)",fmt(v.now)],["2028 base case",fmt(v.base)],["Trough year",fmt(v.tr)],["Destroyed",fmt(v.destroyed)],["Delayed",fmt(v.delayed)]];
+    if(d.r26) pairs.push(["Margin, today to trough",Math.round(d.p26/d.r26*100)+"% to "+Math.round(d.pt/d.rt*100)+"%"]);
+    showTip(d.n,pairs,d.how,px,py);
+  }
+  row.addEventListener("pointermove",function(e){ tipAt(e.clientX,e.clientY); });
+  row.addEventListener("pointerleave",hideTip);
+  row.addEventListener("focus",function(){ var r=row.getBoundingClientRect(); tipAt(r.left+210,r.bottom-4); });
+  row.addEventListener("blur",hideTip);
+  return row;
+}
+function scaleFor(rows){
+  var mx=0, mn=0; rows.forEach(function(x){ var v=derive(x); mx=Math.max(mx,v.now,v.hit); mn=Math.min(mn,v.now); });
+  return {span:mx-mn, neg:-mn};
+}
+var tip=document.getElementById("tip");
+function showTip(title,pairs,note,x,y){
+  tip.textContent=""; tip.appendChild(el("h4",null,title));
+  var dl=el("dl"); pairs.forEach(function(p){ dl.appendChild(el("dt",null,p[0])); dl.appendChild(el("dd",null,p[1])); }); tip.appendChild(dl);
+  if(note) tip.appendChild(el("p",null,note));
+  tip.style.display="block";
+  var w=tip.offsetWidth, h=tip.offsetHeight, vw=window.innerWidth, vh=window.innerHeight;
+  var left=Math.min(Math.max(8,x+14),vw-w-8), top=y+16; if(top+h>vh-8) top=Math.max(8,y-h-12);
+  tip.style.left=left+"px"; tip.style.top=top+"px";
+}
+function hideTip(){ tip.style.display="none"; }
+
+function tiles(){
+  var all=[]; LAYERS.forEach(function(L){ all=all.concat(L.rows); });
+  var a=agg(all), hit=a.pb-a.pt, mem=agg(LAYERS[0].rows), memHit=mem.pb-mem.pt;
+  var T=document.getElementById("tiles"); T.textContent="";
+  [["Profit pool today (2026E)",fmtT(a.p26),"Operating profit, all layers",""],
+   ["2028 base case",fmtT(a.pb),"If vendor guidance is met",""],
+   ["Trough year, "+(scen==="full"?"full bust":"financing-led"),fmtT(a.pt),pct(a.pt,a.p26)+" against today",""],
+   ["Destroyed or delayed",fmtT(hit),fmtT(a.pD)+" destroyed, "+fmtT(hit-a.pD)+" delayed. Memory is "+Math.round(memHit/hit*100)+"%.","key"]
+  ].forEach(function(t){ var d=el("div","tile "+t[3]); d.appendChild(el("div","lab",t[0])); d.appendChild(el("div","val",t[1])); d.appendChild(el("div","note",t[2])); T.appendChild(d); });
+}
+function table(){
+  var tb=document.getElementById("tbl"); tb.textContent="";
+  document.getElementById("table-sum").textContent=(scen==="full"?"Full bust":"Financing-led")+" scenario, US$ billions a year";
+  var th=el("thead"), g=el("tr","grp");
+  [["",1],["Revenue",4],["Operating profit",6]].forEach(function(c){ var x=el("th",null,c[0]); x.colSpan=c[1]; g.appendChild(x); }); th.appendChild(g);
+  var hr=el("tr"); ["Sub-sector","2026E","2028 base","Trough","Lost","Today","2028 base","Trough","Destroyed","Delayed","Trough vs today"].forEach(function(c){ hr.appendChild(el("th",null,c)); });
+  th.appendChild(hr); tb.appendChild(th);
+  var body=el("tbody"), all=[];
+  function line(x,cls){
+    var d=vals(x), tr=el("tr",cls), ph=d.pb-d.pt;
+    [d.n,fmt(d.r26),fmt(d.rb),fmt(d.rt),fmt(d.rb-d.rt),fmt(d.p26),fmt(d.pb),fmt(d.pt),fmt(ph*d.pds),fmt(ph*(1-d.pds)), d.p26<=0?"n/a":d.pt<0?"loss":pct(d.pt,d.p26)]
+      .forEach(function(c){ tr.appendChild(el("td",null,c)); });
+    body.appendChild(tr);
+  }
+  LAYERS.forEach(function(L){ var a=agg(L.rows); a.n=L.name; line(a,"layer"); L.rows.forEach(function(d){ line(d); all.push(d); }); });
+  var t=agg(all); t.n="All layers (revenue double-counts across layers)"; line(t,"total");
+  tb.appendChild(body);
+}
+function render(){
+  var P=mode==="profit";
+  [["btn-profit",P],["btn-revenue",!P],["btn-full",scen==="full"],["btn-fin",scen==="fin"]].forEach(function(b){ document.getElementById(b[0]).setAttribute("aria-pressed",b[1]); });
+  var ch=document.getElementById("chain"); ch.textContent="";
+  CHAINS[scen].forEach(function(s,i){ if(i) ch.appendChild(el("i",null,"then")); ch.appendChild(el("span",null,s)); });
+  var lg=document.getElementById("legend"); lg.textContent="";
+  [["today",(P?"Profit pool":"Revenue")+" today (2026E)"],["destroyed","Destroyed at trough"],["delayed","Delayed at trough"]].forEach(function(p){
+    var s=el("span"), w=el("i","sw"); w.style.background="var(--s-"+p[0]+")"; s.appendChild(w); s.appendChild(document.createTextNode(p[1])); lg.appendChild(s);
+  });
+  tiles(); table();
+  var allRows=[]; LAYERS.forEach(function(L){ allRows=allRows.concat(L.rows); });
+  var keep=scen; [["fin","fk-fin"],["full","fk-full"]].forEach(function(f){
+    scen=f[0]; var a=agg(allRows);
+    document.getElementById(f[1]).textContent="Trough-year profit pool "+fmtT(a.pt)+", "+pct(a.pt,a.p26)+" against today";
+  }); scen=keep;
+  ["fin","full"].forEach(function(k){
+    document.getElementById("br-"+k).setAttribute("aria-pressed",scen===k);
+    document.getElementById("pk-"+k).textContent = scen===k ? "Selected" : "Select";
+  });
+  var s6=STEP6[scen];
+  document.getElementById("s6-h").textContent=s6.h; document.getElementById("s6-p").textContent=s6.p; document.getElementById("s6-c").textContent=s6.c;
+  document.getElementById("loss-scen").textContent = scen==="full" ? "Full bust" : "Financing-led";
+  var ul=document.getElementById("losses"); ul.textContent="";
+  lossItems().forEach(function(it){ var li=el("li"); li.appendChild(el("b",null,it[0])); li.appendChild(document.createTextNode(it[1])); ul.appendChild(li); });
+  var ov=document.getElementById("overview-rows"); ov.textContent="";
+  var layerRows=LAYERS.map(function(L){ var a=agg(L.rows); a.n=L.name; a.who=L.rows.length+" sub-sectors"; return a; });
+  var sc=scaleFor(layerRows); ov.parentNode.classList.toggle("has-neg",sc.neg>0);
+  layerRows.forEach(function(a){ ov.appendChild(buildRow(a,sc)); });
+  var panels=document.getElementById("panels"); panels.textContent="";
+  LAYERS.forEach(function(L){
+    var a=agg(L.rows); a.n=L.name; var v=derive(a);
+    var card=el("section","card"); card.id="layer-"+L.id;
+    var head=el("div","card-head"); head.appendChild(el("h2",null,L.name));
+    head.appendChild(el("span","sum","Today "+fmt(v.now)+"  ·  destroyed or delayed "+fmt(v.hit)+"  ·  trough "+fmt(v.tr)));
+    card.appendChild(head);
+    if(L.why) card.appendChild(el("p","why",L.why));
+    card.appendChild(el("div","scale-note","Bars in this panel share one scale. Label on the lower bar: total (destroyed + delayed)."));
+    var rows=el("div","rows"), s=scaleFor(L.rows); if(s.neg>0) card.classList.add("has-neg");
+    L.rows.forEach(function(d){ rows.appendChild(buildRow(d,s)); });
+    card.appendChild(rows); panels.appendChild(card);
+  });
+}
+
+/* Five-year CDS, basis points. Each point is a reading reported in the press: [date, level, note]. */
+var CDS = [
+ {id:"crwv", name:"CoreWeave", pts:[["2026-06-15",452,"June reading, day approximate"],["2026-10-01",395,"Reported as under 400"],["2026-10-08",895,"Derived from a reported 16% weekly rise"],["2026-10-14",1118],["2026-10-15",1038,"Close, after 1,140 intraday"],["2026-10-19",1082],["2026-10-21",1145],["2026-10-27",1041],["2026-11-20",1233,"Intraday high"]]},
+ {id:"sbg", name:"SoftBank", pts:[["2026-03-05",355],["2026-03-09",380],["2026-03-27",376],["2026-06-15",280,"June, approximate"],["2026-08-05",360,"Approximate"],["2026-10-13",400],["2026-10-20",432],["2026-11-06",462],["2026-11-25",501,"Widest since October 2022"]]},
+ {id:"orcl", name:"Oracle", pts:[["2026-01-02",144],["2026-03-27",198],["2026-07-29",215],["2026-09-15",182,"Mid-September"],["2026-09-26",230],["2026-10-08",260],["2026-10-15",288],["2026-10-19",315],["2026-11-20",328],["2026-11-24",356,"Record"]]},
+ {id:"nvda", name:"Nvidia", pts:[["2025-12-31",39],["2026-06-26",42,"Late June"],["2026-07-27",82,"Intraday record"],["2026-08-19",81],["2026-10-19",101,"October, day approximate"],["2026-10-27",127],["2026-11-12",144.5],["2026-11-20",145.5,"One-year high"],["2026-11-24",142.7]]}
+];
+var MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function T(s){ return Date.parse(s+"T00:00:00Z"); }
+function dlabel(s){ var d=new Date(T(s)); return d.getUTCDate()+" "+MON[d.getUTCMonth()]+" "+d.getUTCFullYear(); }
+function bp(v){ return Math.round(v).toLocaleString("en-US"); }
+var NS="http://www.w3.org/2000/svg";
+function sv(tag,attrs,txt){ var e=document.createElementNS(NS,tag); for(var k in attrs) e.setAttribute(k,attrs[k]); if(txt!=null) e.textContent=txt; return e; }
+function cdsChart(){
+  var box=document.getElementById("cds-chart"); box.textContent="";
+  var w=Math.max(300,box.clientWidth), narrow=w<560, h=narrow?300:360;
+  var m={l:42,r:narrow?126:128,t:14,b:26}, x0=T("2025-12-31"), x1=T("2026-11-25"), y0=Math.log(30), y1=Math.log(1500);
+  var X=function(t){ return m.l+(t-x0)/(x1-x0)*(w-m.l-m.r); }, Y=function(v){ return h-m.b-(Math.log(v)-y0)/(y1-y0)*(h-m.t-m.b); };
+  var svg=sv("svg",{viewBox:"0 0 "+w+" "+h,width:w,height:h});
+  [50,100,200,500,1000].forEach(function(v){
+    svg.appendChild(sv("line",{x1:m.l,x2:w-m.r,y1:Y(v),y2:Y(v),stroke:"var(--hair)","stroke-width":1}));
+    svg.appendChild(sv("text",{x:m.l-6,y:Y(v)+4,"text-anchor":"end"},bp(v)));
+  });
+  svg.appendChild(sv("text",{x:m.l+4,y:Y(1000)-5},narrow?"1,000: distress":"1,000: usually read as distress"));
+  svg.appendChild(sv("line",{x1:m.l,x2:w-m.r,y1:h-m.b,y2:h-m.b,stroke:"var(--base)","stroke-width":1}));
+  for(var i=0;i<11;i++){ if(narrow && i%3) continue; var t=Date.UTC(2026,i,1); svg.appendChild(sv("text",{x:X(t),y:h-8,"text-anchor":i?"middle":"start"},MON[i])); }
+  var all=[];
+  CDS.forEach(function(s){
+    var col="var(--c-"+s.id+")", dstr=s.pts.map(function(p,i){ return (i?"L":"M")+X(T(p[0])).toFixed(1)+" "+Y(p[1]).toFixed(1); }).join(" ");
+    svg.appendChild(sv("path",{d:dstr,fill:"none",stroke:col,"stroke-width":2,"stroke-linejoin":"round","stroke-linecap":"round"}));
+    s.pts.forEach(function(p){
+      var cx=X(T(p[0])), cy=Y(p[1]);
+      svg.appendChild(sv("circle",{cx:cx,cy:cy,r:4,fill:col,stroke:"var(--surface)","stroke-width":2}));
+      all.push({s:s,p:p,cx:cx,cy:cy});
+    });
+    var last=s.pts[s.pts.length-1], lx=w-m.r+10, ly=Y(last[1])+4;
+    svg.appendChild(sv("circle",{cx:lx,cy:ly-4,r:4,fill:col}));
+    svg.appendChild(sv("text",{x:lx+8,y:ly,"class":"end"},s.name+" "+bp(last[1])));
+  });
+  var halo=sv("circle",{r:7,fill:"none",stroke:"var(--ink)","stroke-width":1.5,visibility:"hidden"}); svg.appendChild(halo);
+  var hit=sv("rect",{x:0,y:0,width:w,height:h,fill:"transparent"}); svg.appendChild(hit);
+  hit.addEventListener("pointermove",function(e){
+    var r=svg.getBoundingClientRect(), k=w/r.width, px=(e.clientX-r.left)*k, py=(e.clientY-r.top)*k, best=null, bd=1e9;
+    all.forEach(function(a){ var dd=(a.cx-px)*(a.cx-px)+(a.cy-py)*(a.cy-py); if(dd<bd){ bd=dd; best=a; } });
+    if(!best) return;
+    halo.setAttribute("cx",best.cx); halo.setAttribute("cy",best.cy); halo.setAttribute("visibility","visible");
+    showTip(best.s.name,[[dlabel(best.p[0]),bp(best.p[1])+" bp"]],best.p[2]||null,e.clientX,e.clientY);
+  });
+  hit.addEventListener("pointerleave",function(){ halo.setAttribute("visibility","hidden"); hideTip(); });
+  box.appendChild(svg);
+}
+function cdsStatic(){
+  var lg=document.getElementById("cds-legend"), rd=document.getElementById("cds-readings");
+  CDS.forEach(function(s){
+    var sp=el("span"), w=el("i","sw line"); w.style.background="var(--c-"+s.id+")"; sp.appendChild(w); sp.appendChild(document.createTextNode(s.name)); lg.appendChild(sp);
+    var col=el("div"), h=el("h3"), w2=el("i","sw line"); w2.style.background="var(--c-"+s.id+")"; h.appendChild(w2); h.appendChild(document.createTextNode(s.name)); col.appendChild(h);
+    var t=el("table"), b=el("tbody");
+    s.pts.forEach(function(p){ var tr=el("tr"); tr.appendChild(el("td",null,dlabel(p[0]))); tr.appendChild(el("td",null,bp(p[1]))); b.appendChild(tr); });
+    t.appendChild(b); col.appendChild(t); rd.appendChild(col);
+  });
+}
+
+document.getElementById("btn-profit").addEventListener("click",function(){ mode="profit"; render(); });
+document.getElementById("btn-revenue").addEventListener("click",function(){ mode="revenue"; render(); });
+document.getElementById("btn-full").addEventListener("click",function(){ scen="full"; render(); });
+document.getElementById("btn-fin").addEventListener("click",function(){ scen="fin"; render(); });
+document.getElementById("br-fin").addEventListener("click",function(){ scen="fin"; render(); });
+document.getElementById("br-full").addEventListener("click",function(){ scen="full"; render(); });
+var rz; window.addEventListener("resize",function(){ clearTimeout(rz); rz=setTimeout(function(){ render(); cdsChart(); },150); });
+cdsStatic(); render(); cdsChart();
+</script>
+</body>
+</html>
