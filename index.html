@@ -15,6 +15,7 @@
   --wash:#eef1f5; --accent:#1757ac;
   --s-today:#257de0; --s-destroyed:#f47230; --s-delayed:#00b894;
   --c-crwv:#ee7fac; --c-sbg:#008a17; --c-orcl:#6a4ce2; --c-nvda:#ec4647;
+  --st-quiet:#9aa3ae; --st-warn:#fbb315; --st-crit:#dc3c3d;
   --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --font-display:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
 }
@@ -147,6 +148,36 @@ p{margin:0}
 .takeaways ul,.takeaways ol{margin:0;padding-left:18px;color:var(--ink-2)}
 .takeaways li{margin-bottom:4px}
 .why{font-size:14px;color:var(--ink-2);margin:-2px 0 10px;max-width:74ch}
+.watch-strip{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;background:var(--surface);border:1px solid var(--hair);border-radius:8px;padding:10px 16px;font-size:14px}
+.watch-strip .ws-lab{font-weight:600}
+.watch-strip a{margin-left:auto;font-size:13px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+.pill i{width:10px;height:10px;border-radius:50%;display:inline-block;flex:0 0 auto}
+.pill i.quiet{background:var(--st-quiet)} .pill i.warn{background:var(--st-warn)} .pill i.crit{background:var(--st-crit)}
+#watch,#overview{scroll-margin-top:84px}
+.verdict{font-size:15px;margin-bottom:12px;max-width:74ch}
+.verdict b{font-weight:600}
+.wl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px 28px}
+.wl-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px;margin-bottom:6px}
+.wl-head h3{margin:0;font-size:16px}
+.meter{display:flex;gap:3px;margin:6px 0 4px}
+.meter span{flex:1 1 0;height:8px;border-radius:2px;background:var(--wash)}
+.meter span.on.quiet{background:var(--st-quiet)} .meter span.on.warn{background:var(--st-warn)} .meter span.on.crit{background:var(--st-crit)}
+.rule{font-size:12px;color:var(--ink-2);margin-bottom:6px}
+.wl{list-style:none;margin:0;padding:0}
+.wl li{border-top:1px solid var(--hair)}
+.wl label{display:grid;grid-template-columns:22px minmax(0,1fr);gap:2px 10px;padding:9px 4px;cursor:pointer;border-radius:4px}
+.wl label:hover{background:var(--wash)}
+.wl input{width:18px;height:18px;margin:2px 0 0;accent-color:var(--accent);cursor:pointer}
+.wl input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wl .it{font-size:14px;line-height:1.4}
+.wl .nt{grid-column:2;font-size:12px;color:var(--ink-2);line-height:1.4}
+.dec{display:inline-block;font-size:11px;font-weight:600;color:var(--ink-2);border:1px solid var(--base);border-radius:3px;padding:0 5px;margin-left:6px;vertical-align:1px}
+.wl-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--hair)}
+.btn{font:inherit;font-size:13px;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--base);border-radius:6px;padding:6px 12px;cursor:pointer}
+.btn:hover{background:var(--wash)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 .tablewrap{overflow-x:auto}
 table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums;min-width:860px}
 th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--hair);white-space:nowrap}
@@ -179,6 +210,13 @@ a{color:var(--accent)}
   </header>
 
   <section class="tiles" id="tiles" aria-label="Profit pool summary"></section>
+
+  <div class="watch-strip" id="watch-strip" aria-label="Watch list summary">
+    <span class="ws-lab">Watch list</span>
+    <span class="pill" id="ws-fin"></span>
+    <span class="pill" id="ws-full"></span>
+    <a href="#watch">Open the watch list</a>
+  </div>
 
   <section class="card" id="chain-of-events">
    <details id="story">
@@ -215,7 +253,7 @@ a{color:var(--accent)}
           <li>Hyperscalers describing capex as digestion, or writing down GPUs.</li>
           <li>Unemployment rising and enterprise software guidance cut.</li>
         </ol>
-        <p style="color:var(--ink-2);margin-top:6px">The first two decide it. While rental prices and revenue per token hold, a financing shock stays a financing shock.</p>
+        <p style="color:var(--ink-2);margin-top:6px">The first two decide it. While rental prices and revenue per token hold, a financing shock stays a financing shock. Track both sets of signals in the <a href="#watch">watch list</a>.</p>
       </div>
     </div>
    </details>
@@ -250,6 +288,20 @@ a{color:var(--accent)}
     <div class="legend" id="cds-legend" style="margin:0 0 6px"></div>
     <div id="cds-chart" role="img" aria-label="Line chart of five-year credit default swap spreads for CoreWeave, SoftBank, Oracle and Nvidia from December 2025 to November 2026"></div>
     <div class="readings" id="cds-readings"></div>
+  </section>
+
+  <section class="card" id="watch">
+    <div class="card-head"><h2>Watch list</h2><span class="sum">Tick what has happened. Pre-ticked items were met as of 25 Nov 2026.</span></div>
+    <p class="verdict" id="verdict"></p>
+    <div class="wl-grid">
+      <div id="wl-fin"></div>
+      <div id="wl-full"></div>
+    </div>
+    <div class="wl-actions">
+      <button type="button" class="btn primary" id="wl-show"></button>
+      <button type="button" class="btn" id="wl-reset">Reset to 25 Nov readings</button>
+      <button type="button" class="btn" id="wl-clear">Clear all</button>
+    </div>
   </section>
 
   <section class="card" id="table-view">
@@ -601,6 +653,84 @@ function cdsStatic(){
     t.appendChild(b); col.appendChild(t); rd.appendChild(col);
   });
 }
+
+/* Watch list. met = observed as of 25 Nov 2026. */
+var WATCH = {
+  fin:{name:"Financing-led signals", rule:"Quiet at 0–3 ticked, stress building at 4–6, probably under way at 7 or more.",
+    th:function(n){ return n>=7?"crit":n>=4?"warn":"quiet"; },
+    items:[
+      {id:"f1", t:"Fed still hiking and the 10-year Treasury above 5%", n:"Met: first hike since 2023 in September; 10-year above 5%.", met:true},
+      {id:"f2", t:"SoftBank five-year CDS above 500 bp", n:"Met: 501 bp on 25 Nov, widest since October 2022.", met:true},
+      {id:"f3", t:"CoreWeave five-year CDS above 1,000 bp", n:"Met: 1,233 bp on 20 Nov.", met:true},
+      {id:"f4", t:"Hyperscaler default swaps at record levels", n:"Met: Alphabet and Oracle at records on 25 Nov.", met:true},
+      {id:"f5", t:"OpenAI's listing or a funding round delayed", n:"Met: listing pushed back to 2027.", met:true},
+      {id:"f6", t:"A committed AI build delayed or a lease payment deferred", n:"Met: Oracle's force majeure notice on Project Jupiter in September.", met:true},
+      {id:"f7", t:"Oracle cut to junk by a major rating agency", n:"Not yet: rated BBB-, one notch above junk.", met:false},
+      {id:"f8", t:"A neocloud misses a payment, breaches a covenant or fails to refinance", n:"Not yet.", met:false},
+      {id:"f9", t:"SoftBank sells core assets or extends its March 2027 bridge loan", n:"Not yet: the $40B bridge loan matures 25 March 2027.", met:false},
+      {id:"f10", t:"OpenAI fails to close a round or cuts a compute commitment", n:"Not yet.", met:false}
+    ]},
+  full:{name:"Full-bust signals", rule:"Quiet at 0–1 ticked, watch closely at 2–3, probably slipping at 4 or more, or when both deciders are ticked.",
+    th:function(n,dec){ return (n>=4||dec>=2)?"crit":n>=2?"warn":"quiet"; },
+    items:[
+      {id:"b1", t:"GPU rental prices falling, especially one-year contracts", n:"Not yet: rental prices for older H100s were still rising in late October.", met:false, dec:true},
+      {id:"b2", t:"Labs cutting token prices without faster revenue growth", n:"Not yet: a price war is reported, but lab revenue is still compounding.", met:false, dec:true},
+      {id:"b3", t:"Private-credit funds limiting withdrawals, or GPU-backed loans below about 80 cents", n:"Not yet.", met:false},
+      {id:"b4", t:"Foreclosed GPU capacity sold or rented at fire-sale prices", n:"Not yet.", met:false},
+      {id:"b5", t:"Memory contract prices rolling over", n:"Not yet: memory makers still guide to shortage into 2028 and beyond.", met:false},
+      {id:"b6", t:"Hyperscalers cut capex guidance or describe it as digestion", n:"Not yet.", met:false},
+      {id:"b7", t:"Hyperscalers write down GPUs or shorten depreciation lives", n:"Not yet.", met:false},
+      {id:"b8", t:"Unemployment rising and enterprise software guidance cut", n:"Not yet.", met:false}
+    ]}
+};
+var STLAB={quiet:"Quiet",warn:{fin:"Stress building",full:"Watch closely"},crit:{fin:"Probably under way",full:"Probably slipping"}};
+function stLabel(k,st){ return st==="quiet"?"Quiet":STLAB[st][k]; }
+var WKEY="abpm-watch-v1", wstate={};
+function wDefaults(){ var o={}; ["fin","full"].forEach(function(k){ WATCH[k].items.forEach(function(it){ o[it.id]=it.met; }); }); return o; }
+function wLoad(){ wstate=wDefaults(); try{ var raw=localStorage.getItem(WKEY); if(raw){ var o=JSON.parse(raw); for(var k in o) if(k in wstate) wstate[k]=!!o[k]; } }catch(e){} }
+function wSave(){ try{ localStorage.setItem(WKEY,JSON.stringify(wstate)); }catch(e){} }
+function wCount(k){ var n=0,d=0; WATCH[k].items.forEach(function(it){ if(wstate[it.id]){ n++; if(it.dec) d++; } }); return {n:n,d:d,tot:WATCH[k].items.length,st:WATCH[k].th(n,d)}; }
+function wBuild(){
+  ["fin","full"].forEach(function(k){
+    var W=WATCH[k], box=document.getElementById("wl-"+k); box.textContent="";
+    var h=el("div","wl-head"); h.appendChild(el("h3",null,W.name)); var pl=el("span","pill"); pl.id="wl-pill-"+k; h.appendChild(pl); box.appendChild(h);
+    var m=el("div","meter"); m.id="wl-meter-"+k; W.items.forEach(function(){ m.appendChild(el("span")); }); box.appendChild(m);
+    box.appendChild(el("div","rule",W.rule));
+    var ul=el("ul","wl");
+    W.items.forEach(function(it){
+      var li=el("li"), lab=el("label"), cb=el("input"); cb.type="checkbox"; cb.id="wl-"+it.id; cb.checked=!!wstate[it.id];
+      cb.addEventListener("change",function(){ wstate[it.id]=cb.checked; wSave(); wUpdate(); });
+      lab.htmlFor=cb.id; lab.appendChild(cb);
+      var t=el("span","it",it.t); if(it.dec) t.appendChild(el("span","dec","decider")); lab.appendChild(t);
+      lab.appendChild(el("span","nt",it.n)); li.appendChild(lab); ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  });
+}
+function setPill(node,k,c){ node.textContent=""; var i=el("i",c.st); node.appendChild(i); node.appendChild(document.createTextNode((k==="fin"?"Financing-led ":"Full bust ")+c.n+" of "+c.tot+": "+stLabel(k,c.st))); }
+var wPick="fin";
+function wUpdate(){
+  var cf=wCount("fin"), cb=wCount("full");
+  [["fin",cf],["full",cb]].forEach(function(x){
+    var k=x[0], c=x[1];
+    setPill(document.getElementById("wl-pill-"+k),k,c); setPill(document.getElementById("ws-"+k),k,c);
+    var spans=document.getElementById("wl-meter-"+k).children;
+    for(var i=0;i<spans.length;i++) spans[i].className = i<c.n ? "on "+c.st : "";
+    WATCH[k].items.forEach(function(it){ var cbx=document.getElementById("wl-"+it.id); if(cbx) cbx.checked=!!wstate[it.id]; });
+  });
+  var v=document.getElementById("verdict"), txt;
+  if(cb.st==="crit"){ wPick="full"; txt=["Signals point to a full bust."," Demand-side signals have crossed the line, so the deeper path on this page is the relevant one."]; }
+  else if(cb.st==="warn"){ wPick="full"; txt=["Demand-side signals are appearing."," Watch the two deciders: if rental prices and revenue per token turn, the financing shock is becoming a full bust."]; }
+  else if(cf.st==="crit"){ wPick="fin"; txt=["The financing-led path looks under way."," Credit failures are happening while demand signals stay quiet."]; }
+  else if(cf.st==="warn"){ wPick="fin"; txt=["Credit stress is building; demand signals are quiet."," That is closest to the financing-led path, before any failure has happened."]; }
+  else { wPick="fin"; txt=["No clear signal yet."," Neither set of signals has crossed its first threshold."]; }
+  v.textContent=""; v.appendChild(el("b",null,txt[0])); v.appendChild(document.createTextNode(txt[1]));
+  document.getElementById("wl-show").textContent="Show the "+(wPick==="full"?"full bust":"financing-led")+" numbers";
+}
+wLoad(); wBuild(); wUpdate();
+document.getElementById("wl-reset").addEventListener("click",function(){ wstate=wDefaults(); wSave(); wUpdate(); });
+document.getElementById("wl-clear").addEventListener("click",function(){ for(var k in wstate) wstate[k]=false; wSave(); wUpdate(); });
+document.getElementById("wl-show").addEventListener("click",function(){ scen=wPick; render(); document.getElementById("overview").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth", block:"start"}); });
 
 document.getElementById("btn-profit").addEventListener("click",function(){ mode="profit"; render(); });
 document.getElementById("btn-revenue").addEventListener("click",function(){ mode="revenue"; render(); });
