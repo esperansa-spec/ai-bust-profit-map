@@ -732,7 +732,8 @@ var WATCH = {
       {id:"f7", t:"Oracle cut to junk by a major rating agency", n:"Not yet: rated BBB-, one notch above junk.", met:false},
       {id:"f8", t:"A neocloud misses a payment, breaches a covenant or fails to refinance", n:"Not yet.", met:false},
       {id:"f9", t:"SoftBank sells core assets or extends its March 2027 bridge loan", n:"Not yet: the $40B bridge loan matures 25 March 2027.", met:false},
-      {id:"f10", t:"OpenAI fails to close a round or cuts a compute commitment", n:"Not yet.", met:false}
+      {id:"f10", t:"OpenAI fails to close a round or cuts a compute commitment", n:"Not yet.", met:false},
+      {id:"f11", t:"Banks sell down or hedge their AI data-centre loans", n:"Met: ING, SocGen and HSBC offered or sold about $1.1B in November; BBVA and Deutsche Bank use risk transfers.", met:true}
     ]},
   full:{name:"Full-bust signals", rule:"Quiet at 0–1 ticked, watch closely at 2–3, probably slipping at 4 or more, or when both deciders are ticked.",
     th:function(n,dec){ return (n>=4||dec>=2)?"crit":n>=2?"warn":"quiet"; },
